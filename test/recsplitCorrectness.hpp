@@ -6,13 +6,13 @@
 #include <cstdio>
 #include <iostream>
 
-namespace sux::function {
+namespace bez::function {
 	struct __hash128_t;
 	typedef struct __hash128_t hash128_t;
 }
 
 template<class RS>
-bool testCorrectness(RS &rs, const std::vector<sux::function::hash128_t> &keys) {
+bool testCorrectness(RS &rs, const std::vector<bez::function::hash128_t> &keys) {
 	constexpr std::size_t bits = sizeof(std::uint64_t) * 8;
 	std::vector<std::uint64_t> results((keys.size() + bits - 1) / bits);
 	for (const auto &key : keys) {

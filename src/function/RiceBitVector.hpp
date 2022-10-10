@@ -35,10 +35,10 @@
 #include <cstdio>
 #include <iostream>
 
-namespace sux::function {
+namespace bez::function {
 
 using namespace std;
-using namespace sux;
+using namespace bez;
 
 #ifdef _MSC_VER
 #define expect(x, y) (x)

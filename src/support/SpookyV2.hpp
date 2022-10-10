@@ -30,6 +30,9 @@
 #include <cstdint>
 #include <cstring>
 
+// Hack to not cause "Redefinition" errors when the original RecSplit is also included in the same project.
+// The original must be included first.
+#ifndef ALLOW_UNALIGNED_READS
 #define ALLOW_UNALIGNED_READS 1
 
 class SpookyHash {
@@ -502,3 +505,4 @@ class SpookyHash {
 		return hash1;
 	}
 };
+#endif

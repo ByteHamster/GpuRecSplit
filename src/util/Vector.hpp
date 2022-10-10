@@ -39,7 +39,7 @@
 #include <sys/mman.h>
 #endif
 
-namespace sux::util {
+namespace bez::util {
 
 /** Possible types of memory allocation.
  *

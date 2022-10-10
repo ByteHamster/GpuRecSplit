@@ -8,7 +8,7 @@
 #include <function/GPURecSplit.cuh>
 
 using namespace std;
-using namespace sux::function;
+using namespace bez::function;
 
 static constexpr size_t sizes[] = { 1, 10, 100, 123, 10000, 100000, 1000000, 10000000, 12345678 };
 static constexpr size_t bucket_sizes[] = { 2, 5, 10, 25, 75, 100, 483, 1300, 2000 };

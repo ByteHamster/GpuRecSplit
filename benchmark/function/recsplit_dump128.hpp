@@ -14,12 +14,12 @@
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
-using RecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT>;
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
-using RecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
 #include <function/RecSplit.hpp>
 #endif
@@ -31,7 +31,7 @@ using RecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT>;
 #endif
 
 using namespace std;
-using namespace sux::function;
+using namespace bez::function;
 
 template<class RS>
 void benchmark(RS &rs, const uint64_t n) {

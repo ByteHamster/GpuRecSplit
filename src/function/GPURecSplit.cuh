@@ -65,7 +65,7 @@ namespace ce = gcem;
 
 namespace cg = cooperative_groups;
 
-namespace sux::function {
+namespace bez::function {
 
 using namespace std;
 using namespace std::chrono;

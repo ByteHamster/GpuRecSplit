@@ -94,7 +94,7 @@ constexpr double MIDSTOP_FACTOR = 2.3;
 #undef MORESTATS
 #endif
 
-namespace sux::function {
+namespace bez::function {
 
 using namespace std;
 using namespace std::chrono;

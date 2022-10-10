@@ -45,10 +45,10 @@
 #define LOG2Q 8
 #endif
 
-namespace sux::function {
+namespace bez::function {
 
-using namespace sux;
-using namespace sux::util;
+using namespace bez;
+using namespace bez::util;
 
 /** A double Elias-Fano list.
  *

@@ -3,7 +3,7 @@
 
 #include <function/AbstractParallelRecSplit.hpp>
 
-using namespace sux::function;
+using namespace bez::function;
 
 template<int LEAF_SIZE>
 void print_golomb_rice() {

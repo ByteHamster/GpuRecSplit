@@ -7,20 +7,20 @@
 #include <iostream>
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
-using TestRecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using TestRecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT>;
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
-using TestRecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using TestRecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
 #include <function/RecSplit.hpp>
-template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
-using TestRecSplit = sux::function::RecSplit<LEAF_SIZE, AT>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using TestRecSplit = bez::function::RecSplit<LEAF_SIZE, AT>;
 #endif
 
 using namespace std;
-using namespace sux::function;
+using namespace bez::function;
 
 static constexpr size_t sizes[] = { 1, 10, 100, 123, 10000, 100000, 1000000 };// , 10000000, 12345678 };
 static constexpr size_t bucket_sizes[] = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 25, 75, 100, 231, 483, 1009, 1300, 2000 };

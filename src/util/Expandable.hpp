@@ -33,7 +33,7 @@
 #include <iostream>
 #include <string>
 
-namespace sux::util {
+namespace bez::util {
 
 /** A generic interface for classes that have size (the current
  * number of elements) and capacity (the number of elements

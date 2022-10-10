@@ -11,20 +11,20 @@
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, sux::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
+using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
 const std::string FILE_NAME = "simdBenchmark";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, sux::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
+template<size_t LEAF_SIZE, bez::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
+using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
 const std::string FILE_NAME = "gpuBenchmark";
 #else
 #include <function/RecSplit.hpp>
 const std::string FILE_NAME = "stdBenchmark";
 #endif
 
-using namespace sux::function;
+using namespace bez::function;
 
 static constexpr size_t sizes[] = { 1'000'000, 1'000'000'000 };
 static constexpr size_t bucket_sizes[] = { 5, 50, 500, 2000 };
@@ -56,7 +56,7 @@ void construct(std::ofstream &out) {
 				for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
 
 				auto begin = chrono::high_resolution_clock::now();
-				RecSplit<FROM_LEAF, sux::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size);
+				RecSplit<FROM_LEAF, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size);
 				auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
 				csvPrint(out, FROM_LEAF, bucket_size, size, iteration, elapsed / (double)size, rs.getBitsPerKey(), benchmarkQueries(rs));
 				keys.clear();

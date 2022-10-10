@@ -2,7 +2,7 @@
 
 #include <array>
 
-namespace sux::function {
+namespace bez::function {
 
 /**
   * Contains the golomb rice codes as computed by fill_golomb_rice in RecSplit.hpp.

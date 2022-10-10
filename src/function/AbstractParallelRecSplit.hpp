@@ -52,7 +52,7 @@
 #include <gcem.hpp>
 namespace ce = gcem;
 
-namespace sux::function {
+namespace bez::function {
 
 using namespace std;
 

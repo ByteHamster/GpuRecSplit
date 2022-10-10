@@ -55,7 +55,7 @@ namespace ce = gcem;
 namespace ce = std;
 #endif // _MVC_VER
 
-namespace sux::function {
+namespace bez::function {
 
 using namespace std;
 using namespace std::chrono;
