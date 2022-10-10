@@ -1,0 +1,6 @@
+[submodule "extlib/vectorclass"]
+	path = extlib/vectorclass
+	url = git@github.com:vectorclass/version2.git
+[submodule "extlib/gcem"]
+	path = extlib/gcem
+	url = git@github.com:kthohr/gcem.git

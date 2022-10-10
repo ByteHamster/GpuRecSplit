@@ -6,21 +6,21 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <test/xoroshiro128pp.hpp>
-#include <src/util/csv_printer.hpp>
+#include <xoroshiro128pp.hpp>
+#include <util/csv_printer.hpp>
 
 #if defined(SIMD)
-#include <src/function/SIMDRecSplit.hpp>
+#include <function/SIMDRecSplit.hpp>
 template<size_t LEAF_SIZE, sux::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
 using RecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
 const std::string FILE_NAME = "simdBenchmark";
 #elif defined(GPU)
-#include <src/function/GPURecSplit.cuh>
+#include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE, sux::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
 using RecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
 const std::string FILE_NAME = "gpuBenchmark";
 #else
-#include <src/function/RecSplit.hpp>
+#include <function/RecSplit.hpp>
 const std::string FILE_NAME = "stdBenchmark";
 #endif
 

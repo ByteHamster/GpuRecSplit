@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
-#include <src/function/SIMDRecSplit.hpp>
-#include <src/function/GPURecSplit.cuh>
+#include <function/SIMDRecSplit.hpp>
+#include <function/GPURecSplit.cuh>
 
 using namespace std;
 using namespace sux::function;

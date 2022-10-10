@@ -58,7 +58,7 @@
 #include <thread>
 
 // Define constexpr namespace ce
-#include "src/support/gcem.hpp"
+#include <gcem.hpp>
 namespace ce = gcem;
 
 #ifdef SIMDRS_512_BIT
@@ -87,6 +87,11 @@ constexpr double MIDSTOP_FACTOR = 2.3;
 #define SIMDRS_RESTRICT __restrict
 #else
 #define SIMDRS_RESTRICT /* no op */
+#endif
+
+#ifdef MORESTATS
+// Does not compile with MORESTATS because that area of the code does not use this->xy to access parent class
+#undef MORESTATS
 #endif
 
 namespace sux::function {

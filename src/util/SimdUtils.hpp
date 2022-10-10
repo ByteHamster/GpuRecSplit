@@ -1,7 +1,7 @@
 #pragma once
 
 #include <immintrin.h>
-#include "src/support/vectorclass/vectorclass.h"
+#include <vectorclass.h>
 
 #if INSTRSET >= 9
 #define SIMDRS_512_BIT

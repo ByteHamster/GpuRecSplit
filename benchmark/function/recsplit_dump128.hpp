@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../test/xoroshiro128pp.hpp"
-#include "../../test/recsplitCorrectness.hpp"
+#include "xoroshiro128pp.hpp"
+#include "recsplitCorrectness.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -13,15 +13,15 @@
 #endif
 
 #if defined(SIMD)
-#include <src/function/SIMDRecSplit.hpp>
+#include <function/SIMDRecSplit.hpp>
 template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using RecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT>;
 #elif defined(GPU)
-#include <src/function/GPURecSplit.cuh>
+#include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using RecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
-#include <src/function/RecSplit.hpp>
+#include <function/RecSplit.hpp>
 #endif
 
 #define SAMPLES (11)

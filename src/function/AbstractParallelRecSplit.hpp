@@ -49,7 +49,7 @@
 #include <immintrin.h>
 
 // Define constexpr namespace ce
-#include "src/support/gcem.hpp"
+#include <gcem.hpp>
 namespace ce = gcem;
 
 namespace sux::function {

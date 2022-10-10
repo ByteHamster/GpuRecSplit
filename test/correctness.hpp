@@ -6,15 +6,15 @@
 #include <cstdio>
 #include <iostream>
 #if defined(SIMD)
-#include <src/function/SIMDRecSplit.hpp>
+#include <function/SIMDRecSplit.hpp>
 template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using TestRecSplit = sux::function::SIMDRecSplit<LEAF_SIZE, AT>;
 #elif defined(GPU)
-#include <src/function/GPURecSplit.cuh>
+#include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using TestRecSplit = sux::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
-#include <src/function/RecSplit.hpp>
+#include <function/RecSplit.hpp>
 template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using TestRecSplit = sux::function::RecSplit<LEAF_SIZE, AT>;
 #endif

@@ -1,7 +1,7 @@
 #include <array>
 #include <iostream>
 
-#include "src/function/AbstractParallelRecSplit.hpp"
+#include <function/AbstractParallelRecSplit.hpp>
 
 using namespace sux::function;
 
