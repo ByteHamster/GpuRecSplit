@@ -42,8 +42,10 @@ bool test() {
 
 			for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
 
+			int num_threads = std::thread::hardware_concurrency();
+			num_threads = num_threads == 0 ? 1 : num_threads;
 			GPURecSplit<FROM_LEAF> gpurs(keys, bucket_size);
-			SIMDRecSplit<FROM_LEAF> simdrs(keys, bucket_size);
+			SIMDRecSplit<FROM_LEAF> simdrs(keys, bucket_size, num_threads);
 			std::cout << "l = " << FROM_LEAF << ", b = " << bucket_size << ", n = " << size << ": ";
 			equivalent &= testEquivalence(gpurs, simdrs, keys);
 			keys.clear();

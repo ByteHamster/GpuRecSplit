@@ -69,12 +69,23 @@ int build(int argc, char **argv) {
 	for (uint64_t i = 0; i < n; i++) keys.push_back(hash128_t(next(), next()));
 
 	printf("Building...\n");
-	auto begin = chrono::high_resolution_clock::now();
+
 #ifdef ALLOC_TYPE
-	RecSplit<LEAF, ALLOC_TYPE> rs(keys, bucket_size);
+#define ALLOC_TYPE_APPEND ,ALLOC_TYPE
 #else
-    RecSplit<LEAF> rs(keys, bucket_size);
+#define ALLOC_TYPE_APPEND
 #endif
+
+#if defined(SIMD)
+	int num_threads = std::thread::hardware_concurrency();
+	num_threads = num_threads == 0 ? 1 : num_threads;
+	auto begin = chrono::high_resolution_clock::now();
+	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
+#else
+	auto begin = chrono::high_resolution_clock::now();
+	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
+#endif
+
 	auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
 	printf("Construction time: %.3f s, %.0f ns/key\n", elapsed * 1E-9, elapsed / (double)n);
 

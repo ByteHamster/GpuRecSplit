@@ -22,20 +22,24 @@ void interactive(int argc, char** argv) {
 	constexpr int BUCKET_SIZE = 100;
 	RecSplit<LEAF_SIZE> recSplit;
 	std::vector<std::string> strings;
+	std::vector<hash128_t> keys;
 	if (argc > 1) {
 		int n = atoi(argv[1]);
-		std::vector<hash128_t> keys;
 		keys.reserve(n);
 		for (uint64_t i = 0; i < n; i++) keys.push_back(hash128_t(next(), next()));
-		recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
 	} else {
-		std::vector<hash128_t> keys;
-		for(std::string key; getline(std::cin, key) && key != "";) {
+		for (std::string key; getline(std::cin, key) && key != "";) {
 			strings.push_back(key);
 			keys.push_back(first_hash(key.c_str(), key.size()));
 		}
-		recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
 	}
+#if defined(SIMD)
+	int num_threads = std::thread::hardware_concurrency();
+	num_threads = num_threads == 0 ? 1 : num_threads;
+	recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE, num_threads);
+#else
+	recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
+#endif
 	for (std::string s; std::cin >> s;) {
 		if (s == "/cout") {
 			std::ofstream myfile;

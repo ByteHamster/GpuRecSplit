@@ -55,8 +55,16 @@ void construct(std::ofstream &out) {
 			for (int iteration = 0; iteration < ITERATIONS; ++iteration) {
 				for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
 
+#if defined(SIMD)
+				int num_threads = std::thread::hardware_concurrency();
+				num_threads = num_threads == 0 ? 1 : num_threads;
+				auto begin = chrono::high_resolution_clock::now();
+				RecSplit<FROM_LEAF, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size, num_threads);
+#else
 				auto begin = chrono::high_resolution_clock::now();
 				RecSplit<FROM_LEAF, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size);
+#endif
+
 				auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
 				csvPrint(out, FROM_LEAF, bucket_size, size, iteration, elapsed / (double)size, rs.getBitsPerKey(), benchmarkQueries(rs));
 				keys.clear();

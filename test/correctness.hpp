@@ -40,7 +40,14 @@ bool test() {
 
 			for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
 
+#if defined(SIMD)
+			int num_threads = std::thread::hardware_concurrency();
+			num_threads = num_threads == 0 ? 1 : num_threads;
+			TestRecSplit<FROM_LEAF> rs(keys, bucket_size, num_threads);
+#else
 			TestRecSplit<FROM_LEAF> rs(keys, bucket_size);
+#endif
+
 			std::cout << "l = " << FROM_LEAF << ", b = " << bucket_size << ", n = " << size << ": ";
 			correct &= testCorrectness(rs, keys);
 			keys.clear();

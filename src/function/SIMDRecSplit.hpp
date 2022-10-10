@@ -190,14 +190,14 @@ class SIMDRecSplit
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    SIMDRecSplit(const vector<string> &keys, const size_t bucket_size) {
+    SIMDRecSplit(const vector<string> &keys, const size_t bucket_size, int num_threads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
         for (size_t i = 0; i < this->keys_count; ++i) {
             h[i] = first_hash(keys[i].c_str(), keys[i].size());
         }
-        hash_gen(h);
+        hash_gen(h, num_threads);
         free(h);
     }
 
@@ -211,10 +211,10 @@ class SIMDRecSplit
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    SIMDRecSplit(vector<hash128_t> &keys, const size_t bucket_size) {
+    SIMDRecSplit(vector<hash128_t> &keys, const size_t bucket_size, int num_threads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
-        hash_gen(&keys[0]);
+        hash_gen(&keys[0], num_threads);
     }
 
     /** Builds a SIMDRecSplit instance using a list of keys returned by a stream and bucket size.
@@ -224,12 +224,12 @@ class SIMDRecSplit
      * @param input an open input stream returning a list of keys, one per line.
      * @param bucket_size the desired bucket size.
      */
-    SIMDRecSplit(ifstream& input, const size_t bucket_size) {
+    SIMDRecSplit(ifstream& input, const size_t bucket_size, int num_threads) {
         this->bucket_size = bucket_size;
         vector<hash128_t> h;
         for(string key; getline(input, key);) h.push_back(first_hash(key.c_str(), key.size()));
         this->keys_count = h.size();
-        hash_gen(&h[0]);
+        hash_gen(&h[0], num_threads);
     }
 
   private:
@@ -678,7 +678,7 @@ class SIMDRecSplit
         }
     }
 
-    void hash_gen(hash128_t *hashes) {
+    void hash_gen(hash128_t *hashes, int num_threads) {
 #ifdef MORESTATS
         time_bij = 0;
         memset(time_split, 0, sizeof time_split);
@@ -717,8 +717,6 @@ class SIMDRecSplit
 #endif
         typename RiceBitVector<AT>::Builder builder;
 
-        int num_threads = std::thread::hardware_concurrency();
-        num_threads = num_threads == 0 ? 1 : num_threads;
         vector<thread> threads;
         threads.reserve(num_threads);
         mutex mtx;
