@@ -16,10 +16,9 @@ constexpr bool NO_AVX = false;
 
 #elif INSTRSET == 8
 constexpr bool NO_AVX = false;
-#pragma message("AVX2")
 #else
 constexpr bool NO_AVX = true;
-#pragma message("No AVX512 and AVX2 => suboptimal performance")
+#pragma message("SIMDRecSplit was compiled without AVX512 and AVX2 support => suboptimal performance")
 #endif
 
 #ifdef SIMDRS_512_BIT
