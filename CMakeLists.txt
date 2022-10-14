@@ -56,7 +56,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	endif()
 
 	# Standard RecSplit
-	add_executable(recsplit_dump128 benchmark/function/recsplit_dump128.cpp)
+	add_executable(recsplit_dump128 benchmark/recsplit_dump128.cpp)
 	target_link_libraries(recsplit_dump128 PUBLIC RecSplit BenchmarkUtils)
 
 	add_executable(recsplit_interactive test/interactive.cpp)
@@ -65,7 +65,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_executable(recsplit_correctness test/correctness.cpp)
 	target_link_libraries(recsplit_correctness PUBLIC RecSplit BenchmarkUtils)
 
-	add_executable(recsplit_construction benchmark/function/benchmark_construction.cpp)
+	add_executable(recsplit_construction benchmark/benchmark_construction.cpp)
 	target_link_libraries(recsplit_construction PUBLIC RecSplit BenchmarkUtils)
 
 	# GPURecSplit
@@ -76,7 +76,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 			set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "50;61;72")
 		endfunction()
 
-		add_executable(gpurecsplit_dump128 benchmark/function/recsplit_dump128.cu)
+		add_executable(gpurecsplit_dump128 benchmark/recsplit_dump128.cu)
 		target_link_libraries(gpurecsplit_dump128 PUBLIC GPURecSplit BenchmarkUtils)
 		prepareCudaTarget(gpurecsplit_dump128)
 
@@ -88,7 +88,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 		target_link_libraries(gpurecsplit_correctness PUBLIC GPURecSplit BenchmarkUtils)
 		prepareCudaTarget(gpurecsplit_correctness)
 
-		add_executable(gpurecsplit_construction benchmark/function/benchmark_construction.cu)
+		add_executable(gpurecsplit_construction benchmark/benchmark_construction.cu)
 		target_link_libraries(gpurecsplit_construction PUBLIC GPURecSplit BenchmarkUtils)
 		prepareCudaTarget(gpurecsplit_construction)
 
@@ -98,7 +98,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	endif()
 
 	# SIMDRecSplit
-	add_executable(simdrecsplit_dump128 benchmark/function/recsplit_dump128.cpp)
+	add_executable(simdrecsplit_dump128 benchmark/recsplit_dump128.cpp)
 	target_link_libraries(simdrecsplit_dump128 PUBLIC SIMDRecSplit BenchmarkUtils)
 
 	add_executable(simdrecsplit_interactive test/interactive.cpp)
@@ -107,6 +107,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_executable(simdrecsplit_correctness test/correctness.cpp)
 	target_link_libraries(simdrecsplit_correctness PUBLIC SIMDRecSplit BenchmarkUtils)
 
-	add_executable(simdrecsplit_construction benchmark/function/benchmark_construction.cpp)
+	add_executable(simdrecsplit_construction benchmark/benchmark_construction.cpp)
 	target_link_libraries(simdrecsplit_construction PUBLIC SIMDRecSplit BenchmarkUtils)
 endif()

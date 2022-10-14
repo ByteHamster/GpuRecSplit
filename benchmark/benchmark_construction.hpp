@@ -7,7 +7,7 @@
 #include <fstream>
 #include <string>
 #include <xoroshiro128pp.hpp>
-#include <util/csv_printer.hpp>
+#include "csv_printer.hpp"
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
