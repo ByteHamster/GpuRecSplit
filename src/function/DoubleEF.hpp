@@ -37,7 +37,7 @@
 #include <vector>
 #include <cassert>
 
-#ifdef SIMD_DOUBLE_EF
+#ifdef SIMD
 #include "../util/SimdUtils.hpp"
 #endif
 
@@ -149,7 +149,7 @@ class DoubleEF {
 		int64_t prev_bucket_bits = 0;
 
 		uint64_t i = 1;
-#ifdef SIMD_DOUBLE_EF
+#ifdef SIMD
 		if constexpr (FAST_CONSTRUCTION) {
 			FullVecQ cum_keys_min_delta_vec = cum_keys_min_delta;
 			FullVecQ min_diff_vec = min_diff;
@@ -170,7 +170,7 @@ class DoubleEF {
 			min_diff = horizontal_min(min_diff_vec);
 			prev_bucket_bits = prev_bucket_bits_vec[0];
 		}
-#endif // SIMD_DOUBLE_EF
+#endif // SIMD
 		for (; i <= num_buckets; ++i) {
 			const int64_t nkeys_delta = cum_keys[i] - cum_keys[i - 1];
 			cum_keys_min_delta = min(cum_keys_min_delta, nkeys_delta);
@@ -204,7 +204,7 @@ class DoubleEF {
 
 		i = 0;
 		uint64_t cum_delta = 0, bit_delta = 0;
-#ifdef SIMD_DOUBLE_EF
+#ifdef SIMD
 		if constexpr (FAST_CONSTRUCTION) {
 #ifdef SIMDRS_512_BIT
 			FullVecUq iVec(0, 1, 2, 3, 4, 5, 6, 7);
@@ -271,7 +271,7 @@ class DoubleEF {
 			cum_delta = cum_keys_min_delta * i;
 			bit_delta = min_diff * i;
 		}
-#endif // SIMD_DOUBLE_EF
+#endif // SIMD
 		for (; i <= num_buckets; i++, cum_delta += cum_keys_min_delta, bit_delta += min_diff) {
 			if (l_cum_keys != 0) set_bits(lower_bits, i * (l_cum_keys + l_position), l_cum_keys, (cum_keys[i] - cum_delta) & lower_bits_mask_cum_keys);
 			set(upper_bits_cum_keys, ((cum_keys[i] - cum_delta) >> l_cum_keys) + i);

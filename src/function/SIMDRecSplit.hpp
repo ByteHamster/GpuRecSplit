@@ -36,10 +36,6 @@
 
 #pragma once
 
-#ifndef SIMD_DOUBLE_EF
-#define SIMD_DOUBLE_EF
-#endif
-
 #include "../util/Vector.hpp"
 #include "../util/SimdUtils.hpp"
 #include "DoubleEF.hpp"
@@ -60,6 +56,10 @@
 // Define constexpr namespace ce
 #include <gcem.hpp>
 namespace ce = gcem;
+
+#ifndef SIMD
+#error Need to compile SIMDRecSplit with -DSIMD
+#endif
 
 #ifdef SIMDRS_512_BIT
 constexpr double MIDSTOP_FACTOR = 2.6;

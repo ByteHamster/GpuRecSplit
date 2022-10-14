@@ -36,10 +36,6 @@
 
 #pragma once
 
-#ifndef SIMD_DOUBLE_EF
-#define SIMD_DOUBLE_EF
-#endif
-
 #include "../util/Vector.hpp"
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
@@ -60,7 +56,7 @@
 #include <cooperative_groups/memcpy_async.h>
 
 // Define constexpr namespace ce
-#include "src/support/gcem.hpp"
+#include <gcem.hpp>
 namespace ce = gcem;
 
 namespace cg = cooperative_groups;

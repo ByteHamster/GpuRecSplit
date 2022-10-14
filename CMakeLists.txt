@@ -16,33 +16,21 @@ add_library(RecSplit INTERFACE)
 target_compile_features(RecSplit INTERFACE cxx_std_20)
 target_include_directories(RecSplit INTERFACE src)
 target_link_libraries(RecSplit INTERFACE gcem)
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-	target_compile_options(RecSplit INTERFACE -march=native)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-	target_compile_options(RecSplit INTERFACE /constexpr:steps10000000)
-endif()
+target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-march=native>)
 
 # GPURecSplit
 include (CheckLanguage)
 check_language(CUDA)
 if (CMAKE_CUDA_COMPILER)
 	enable_language(CUDA)
-endif()
-if (CMAKE_CUDA_COMPILER)
+
 	add_library(GPURecSplit INTERFACE)
 	target_include_directories(GPURecSplit INTERFACE src)
 	target_compile_features(GPURecSplit INTERFACE cxx_std_20)
 	target_compile_options(GPURecSplit INTERFACE --expt-relaxed-constexpr)
-	set_target_properties(GPURecSplit PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
-	set_target_properties(GPURecSplit PROPERTIES CUDA_ARCHITECTURES 61-virtual)
+	target_compile_options(GPURecSplit INTERFACE -Xcompiler="-march=native")
 	target_link_libraries(GPURecSplit INTERFACE gcem)
-	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-		target_compile_options(GPURecSplit INTERFACE -march=native)
-		target_link_libraries(GPURecSplit INTERFACE pthread)
-	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-		target_compile_options(GPURecSplit INTERFACE -constexpr:steps10000000 -arch:AVX2 -DINSTRSET=8)
-		target_include_directories(GPURecSplit INTERFACE src/support)
-	endif()
+	target_link_libraries(GPURecSplit INTERFACE pthread)
 endif()
 
 # SIMDRecSplit
@@ -51,26 +39,20 @@ target_include_directories(SIMDRecSplit INTERFACE src)
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
 target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass)
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-	target_compile_options(SIMDRecSplit INTERFACE -march=native)
-	target_link_libraries(SIMDRecSplit INTERFACE pthread)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-	target_compile_options(SIMDRecSplit INTERFACE /constexpr:steps10000000 /arch:AVX2 /DINSTRSET=8)
-endif()
+target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-march=native>)
+target_link_libraries(SIMDRecSplit INTERFACE pthread)
 
 # ---------------------------- Benchmarks ----------------------------
-# Only added if this is the main cmake file
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_library(BenchmarkUtils INTERFACE)
 	target_include_directories(BenchmarkUtils INTERFACE benchmark)
 	target_include_directories(BenchmarkUtils INTERFACE test)
 
-	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-		target_compile_options(RecSplit INTERFACE -Wall -Wextra)
-		target_compile_options(SIMDRecSplit INTERFACE -Wall -Wextra)
-		if (CMAKE_CUDA_COMPILER)
-			target_compile_options(GPURecSplit INTERFACE -Wall -Wextra)
-		endif()
+	# Warnings if this is the main project
+	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
+	target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
+	if (CMAKE_CUDA_COMPILER)
+		target_compile_options(GPURecSplit INTERFACE -Xcompiler="-Wall"  -Xcompiler="-Wextra")
 	endif()
 
 	# Standard RecSplit
@@ -88,20 +70,31 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
 	# GPURecSplit
 	if (CMAKE_CUDA_COMPILER)
+		function(prepareCudaTarget target)
+			# Need to be set on the top-level target, not the GPURecSplit target. Otherwise cmake complains
+			set_target_properties(${target} PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
+			set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "50;61;72")
+		endfunction()
+
 		add_executable(gpurecsplit_dump128 benchmark/function/recsplit_dump128.cu)
 		target_link_libraries(gpurecsplit_dump128 PUBLIC GPURecSplit BenchmarkUtils)
+		prepareCudaTarget(gpurecsplit_dump128)
 
 		add_executable(gpurecsplit_interactive test/interactive.cu)
 		target_link_libraries(gpurecsplit_interactive PUBLIC GPURecSplit BenchmarkUtils)
+		prepareCudaTarget(gpurecsplit_interactive)
 
 		add_executable(gpurecsplit_correctness test/correctness.cu)
 		target_link_libraries(gpurecsplit_correctness PUBLIC GPURecSplit BenchmarkUtils)
+		prepareCudaTarget(gpurecsplit_correctness)
 
 		add_executable(gpurecsplit_construction benchmark/function/benchmark_construction.cu)
 		target_link_libraries(gpurecsplit_construction PUBLIC GPURecSplit BenchmarkUtils)
+		prepareCudaTarget(gpurecsplit_construction)
 
 		add_executable(gpu_simd_equivalence test/GPUandSIMDequivalence.cu)
-		target_link_libraries(gpurecsplit_construction PUBLIC GPURecSplit SIMDRecSplit BenchmarkUtils)
+		target_link_libraries(gpu_simd_equivalence PUBLIC GPURecSplit SIMDRecSplit BenchmarkUtils)
+		prepareCudaTarget(gpu_simd_equivalence)
 	endif()
 
 	# SIMDRecSplit
