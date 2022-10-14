@@ -16,7 +16,7 @@ add_library(RecSplit INTERFACE)
 target_compile_features(RecSplit INTERFACE cxx_std_20)
 target_include_directories(RecSplit INTERFACE src)
 target_link_libraries(RecSplit INTERFACE gcem)
-target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-march=native>)
+target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 # GPURecSplit
 include (CheckLanguage)
@@ -39,7 +39,7 @@ target_include_directories(SIMDRecSplit INTERFACE src)
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
 target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass)
-target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-march=native>)
+target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 target_link_libraries(SIMDRecSplit INTERFACE pthread)
 
 # ---------------------------- Benchmarks ----------------------------
@@ -49,8 +49,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	target_include_directories(BenchmarkUtils INTERFACE test)
 
 	# Warnings if this is the main project
-	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
-	target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
+	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)
+	target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)
 	if (CMAKE_CUDA_COMPILER)
 		target_compile_options(GPURecSplit INTERFACE -Xcompiler="-Wall"  -Xcompiler="-Wextra")
 	endif()
