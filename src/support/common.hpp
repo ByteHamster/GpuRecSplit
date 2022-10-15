@@ -221,7 +221,7 @@ inline int lambda_safe(uint64_t word) { return word == 0 ? -1 : 63 ^ clzll(word)
  *
  */
 inline uint32_t clear_rho(uint32_t word) {
-#ifdef __BMI1__
+#ifdef __BMI__
 	return _blsr_u32(word);
 #else
 	return word & (word - 1);
