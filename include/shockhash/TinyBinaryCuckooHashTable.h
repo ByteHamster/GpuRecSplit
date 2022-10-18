@@ -5,9 +5,29 @@
 #include "Function.h"
 #include "MurmurHash64.h"
 #include <cstring>
-#include "../../../../SicHash/SicHash/include/IrregularCuckooHashTable.h"
 
-namespace sichash {
+namespace shockhash {
+struct HashedKey {
+    uint64_t mhc;
+
+    HashedKey() {
+        this->mhc = 0;
+    }
+
+    explicit HashedKey(uint64_t mhc) : mhc(mhc) {
+    }
+
+    explicit HashedKey(const std::string &element, uint32_t seed = 0) {
+        uint64_t stringHash = util::MurmurHash64(element.data(), element.length());
+        uint64_t modified = stringHash + seed;
+        mhc = util::MurmurHash64(&modified, sizeof(uint64_t));
+    }
+
+    [[nodiscard]] inline uint64_t hash(int hashFunctionIndex, size_t range) const {
+        return util::fastrange64(util::remix(mhc + hashFunctionIndex), range);
+    }
+};
+
 /**
  * Tiny binary cuckoo hash table. Construction needs multiple tries before succeeding.
  */

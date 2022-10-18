@@ -219,9 +219,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             const auto b = reader.readNext(golomb_param(m));
 
             // Begin: difference to RecSplit.
-            sichash::HashedKey key(hash.second);
+            shockhash::HashedKey key(hash.second);
             size_t hashFunctionIndex = ribbon->retrieve(hash.second);
-            return cum_keys + sichash::TinyBinaryCuckooHashTable::hashToCell(key, b + start_seed[level], m, hashFunctionIndex);
+            return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(key, b + start_seed[level], m, hashFunctionIndex);
             // End: difference to RecSplit.
         }
 
@@ -263,16 +263,16 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                 auto start_time = high_resolution_clock::now();
 #endif
                 // Begin: difference to RecSplit.
-                sichash::TinyBinaryCuckooHashTable table(m, m);
+                shockhash::TinyBinaryCuckooHashTable table(m, m);
                 for (size_t i = start; i < end; i++) {
-                    table.prepare(sichash::HashedKey(bucket[i]));
+                    table.prepare(shockhash::HashedKey(bucket[i]));
                 }
                 for (;;) {
                     if (table.construct(x)) break;
                     x++;
                 }
                 for (size_t i = 0; i < m; i++) {
-                    size_t cell1 = sichash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
+                    size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
                     ribbonInput.emplace_back(table.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
                 }
                 // End: difference to RecSplit.

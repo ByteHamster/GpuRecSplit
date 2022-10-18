@@ -20,7 +20,6 @@ using RecSplit = bez::function::RecSplit<LEAF_SIZE, AT>;
 void interactive(int argc, char** argv) {
 	constexpr int LEAF_SIZE = 16;
 	constexpr int BUCKET_SIZE = 100;
-	bez::function::RecSplit<LEAF_SIZE> recSplit;
 	std::vector<std::string> strings;
 	std::vector<bez::function::hash128_t> keys;
 	if (argc > 1) {
@@ -37,9 +36,9 @@ void interactive(int argc, char** argv) {
 #if defined(SIMD)
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
-	recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE, num_threads);
+	auto recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE, num_threads);
 #else
-	recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
+	auto recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
 #endif
 	for (std::string s; std::cin >> s;) {
 		if (s == "/cout") {
