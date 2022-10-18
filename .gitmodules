@@ -15,4 +15,4 @@
 	url = git@github.com:ByteHamster/SimpleRibbon.git
 [submodule "extlib/sux"]
 	path = extlib/sux
-	url = git@github.com:vigna/sux.git
+	url = git@github.com:ByteHamster-etc/sux.git
