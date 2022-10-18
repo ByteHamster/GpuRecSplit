@@ -4,3 +4,9 @@
 [submodule "extlib/gcem"]
 	path = extlib/gcem
 	url = git@github.com:kthohr/gcem.git
+[submodule "extlib/tlx"]
+	path = extlib/tlx
+	url = git@github.com:tlx/tlx.git
+[submodule "extlib/util"]
+	path = extlib/util
+	url = git@github.com:ByteHamster/Util.git

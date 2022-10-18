@@ -1,5 +1,5 @@
 #define MORESTATS
-#include "xoroshiro128pp.hpp"
+#include <XorShift64.h>
 #include <fstream>
 #include <cstdlib>
 
@@ -13,24 +13,25 @@ template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLO
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
 #include <function/RecSplit.hpp>
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using RecSplit = bez::function::RecSplit<LEAF_SIZE, AT>;
 #endif
-
-using namespace bez::function;
 
 void interactive(int argc, char** argv) {
 	constexpr int LEAF_SIZE = 16;
 	constexpr int BUCKET_SIZE = 100;
-	RecSplit<LEAF_SIZE> recSplit;
+	bez::function::RecSplit<LEAF_SIZE> recSplit;
 	std::vector<std::string> strings;
-	std::vector<hash128_t> keys;
+	std::vector<bez::function::hash128_t> keys;
 	if (argc > 1) {
 		int n = atoi(argv[1]);
 		keys.reserve(n);
-		for (uint64_t i = 0; i < n; i++) keys.push_back(hash128_t(next(), next()));
+        util::XorShift64 prng(0x5603141978c51071);
+		for (uint64_t i = 0; i < n; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 	} else {
 		for (std::string key; getline(std::cin, key) && key != "";) {
 			strings.push_back(key);
-			keys.push_back(first_hash(key.c_str(), key.size()));
+			keys.push_back(bez::function::first_hash(key.c_str(), key.size()));
 		}
 	}
 #if defined(SIMD)

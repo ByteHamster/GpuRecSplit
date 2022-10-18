@@ -1,14 +1,11 @@
 #pragma once
 
-#include "xoroshiro128pp.hpp"
+#include <XorShift64.h>
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
 #include <function/SIMDRecSplit.hpp>
 #include <function/GPURecSplit.cuh>
-
-using namespace std;
-using namespace bez::function;
 
 static constexpr size_t sizes[] = { 1, 10, 100, 123, 10000, 100000, 1000000, 10000000, 12345678 };
 static constexpr size_t bucket_sizes[] = { 2, 5, 10, 25, 75, 100, 483, 1300, 2000 };
@@ -16,7 +13,7 @@ static constexpr int MIN_TEST_LEAF_SIZE = 2;
 static constexpr int MAX_TEST_LEAF_SIZE = 24;
 
 template<class RS1, class RS2>
-bool testEquivalence(RS1 &rs1, RS2 &rs2, const std::vector<hash128_t> &keys) {
+bool testEquivalence(RS1 &rs1, RS2 &rs2, const std::vector<bez::function::hash128_t> &keys) {
 	for (const auto &key : keys) {
 		std::size_t result1 = rs1(key);
 		std::size_t result2 = rs2(key);
@@ -32,7 +29,7 @@ bool testEquivalence(RS1 &rs1, RS2 &rs2, const std::vector<hash128_t> &keys) {
 template<int FROM_LEAF, int TO_LEAF>
 bool test() {
 	bool equivalent = true;
-	std::vector<hash128_t> keys;
+	std::vector<bez::function::hash128_t> keys;
 	for (const size_t bucket_size : bucket_sizes) {
 		for (size_t size : sizes) {
 			if (FROM_LEAF > 20)
@@ -40,12 +37,13 @@ bool test() {
 			else if (FROM_LEAF > 16)
 				size = min((unsigned long long)size, 1'000'000ULL);
 
-			for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
+            util::XorShift64 prng(0x5603141978c51071);
+			for (uint64_t i = 0; i < size; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 
 			int num_threads = std::thread::hardware_concurrency();
 			num_threads = num_threads == 0 ? 1 : num_threads;
-			GPURecSplit<FROM_LEAF> gpurs(keys, bucket_size);
-			SIMDRecSplit<FROM_LEAF> simdrs(keys, bucket_size, num_threads);
+			bez::function::GPURecSplit<FROM_LEAF> gpurs(keys, bucket_size);
+			bez::function::SIMDRecSplit<FROM_LEAF> simdrs(keys, bucket_size, num_threads);
 			std::cout << "l = " << FROM_LEAF << ", b = " << bucket_size << ", n = " << size << ": ";
 			equivalent &= testEquivalence(gpurs, simdrs, keys);
 			keys.clear();

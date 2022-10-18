@@ -47,6 +47,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_library(BenchmarkUtils INTERFACE)
 	target_include_directories(BenchmarkUtils INTERFACE benchmark)
 	target_include_directories(BenchmarkUtils INTERFACE test)
+	target_include_directories(BenchmarkUtils INTERFACE extlib/util/include)
+
+	set(TLX_INSTALL_INCLUDE_DIR tlx CACHE PATH "Workaround for TLX breaking the first cmake call")
+	add_subdirectory(extlib/tlx EXCLUDE_FROM_ALL)
+	target_link_libraries(BenchmarkUtils INTERFACE tlx)
 
 	# Warnings if this is the main project
 	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)

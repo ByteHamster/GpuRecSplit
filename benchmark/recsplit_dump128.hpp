@@ -1,6 +1,6 @@
 #pragma once
 
-#include "xoroshiro128pp.hpp"
+#include <XorShift64.h>
 #include "recsplitCorrectness.hpp"
 #include <algorithm>
 #include <chrono>
@@ -31,7 +31,6 @@ using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #endif
 
 using namespace std;
-using namespace bez::function;
 
 template<class RS>
 void benchmark(RS &rs, const uint64_t n) {
@@ -41,10 +40,9 @@ void benchmark(RS &rs, const uint64_t n) {
 	uint64_t h = 0;
 
 	for (int k = SAMPLES; k-- != 0;) {
-		s[0] = 0x5603141978c51071;
-		s[1] = 0x3bbddc01ebdf4b72;
+        util::XorShift64 prng(0x5603141978c51071);
 		auto begin = chrono::high_resolution_clock::now();
-		for (uint64_t i = 0; i < n; i++) h ^= rs(hash128_t(next(), next() ^ h));
+		for (uint64_t i = 0; i < n; i++) h ^= rs(bez::function::hash128_t(prng(), prng() ^ h));
 		auto end = chrono::high_resolution_clock::now();
 		const uint64_t elapsed = chrono::duration_cast<chrono::nanoseconds>(end - begin).count();
 		sample[k] = elapsed;
@@ -65,8 +63,9 @@ int build(int argc, char **argv) {
 
 	const uint64_t n = strtoll(argv[1], NULL, 0);
 	const size_t bucket_size = strtoll(argv[2], NULL, 0);
-	std::vector<hash128_t> keys;
-	for (uint64_t i = 0; i < n; i++) keys.push_back(hash128_t(next(), next()));
+    util::XorShift64 prng(0x5603141978c51071);
+	std::vector<bez::function::hash128_t> keys;
+	for (uint64_t i = 0; i < n; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 
 	printf("Building...\n");
 
@@ -80,10 +79,10 @@ int build(int argc, char **argv) {
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
 	auto begin = chrono::high_resolution_clock::now();
-	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
+	bez::function::RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
 #else
 	auto begin = chrono::high_resolution_clock::now();
-	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
+	bez::function::RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
 #endif
 
 	auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();

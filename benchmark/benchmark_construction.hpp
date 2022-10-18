@@ -6,89 +6,103 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <xoroshiro128pp.hpp>
-#include "csv_printer.hpp"
+#include <XorShift64.h>
+#include <tlx/cmdline_parser.hpp>
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, bez::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
-const std::string FILE_NAME = "simdBenchmark";
+template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
+using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+std::string name = "SimdRecSplit";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, bez::util::AllocType AT, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
-const std::string FILE_NAME = "gpuBenchmark";
+template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
+using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+std::string name = "GpuRecSplit";
 #else
 #include <function/RecSplit.hpp>
-const std::string FILE_NAME = "stdBenchmark";
+template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
+using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+std::string name = "RecSplit";
 #endif
 
-using namespace bez::function;
+#define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory");
 
-static constexpr size_t sizes[] = { 1'000'000, 1'000'000'000 };
-static constexpr size_t bucket_sizes[] = { 5, 50, 500, 2000 };
-static constexpr int MIN_TEST_LEAF_SIZE = 5;
-static constexpr int MAX_TEST_LEAF_SIZE = 17;
-static constexpr int ITERATIONS = 5;
-static constexpr int QUERIES = 1'000'000;
+size_t numObjects = 1e6;
+size_t numQueries = 1e6;
+bool rotations = false;
+size_t leafSize = 8;
+size_t bucketSize = 1000;
 
-template<class RS>
-double benchmarkQueries(RS &rs) {
-	uint64_t h = 0;
-	auto begin = chrono::high_resolution_clock::now();
-	for (int i = 0; i < QUERIES; i++) h ^= rs(hash128_t(next(), next() ^ h));
-	auto end = chrono::high_resolution_clock::now();
-	const uint64_t elapsed = chrono::duration_cast<chrono::nanoseconds>(end - begin).count();
-	const volatile uint64_t unused = h;
-	(void)unused;
-	return (double)elapsed / QUERIES;
+template<typename RecSplit>
+void construct() {
+    auto time = std::chrono::system_clock::now();
+    long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
+    std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
+    util::XorShift64 prng(seed);
+	std::vector<bez::function::hash128_t> keys;
+    for (size_t i = 0; i < numObjects; i++) {
+        keys.push_back(bez::function::hash128_t(prng(), prng()));
+    }
+
+    std::cout<<"Constructing"<<std::endl;
+    auto beginConstruction = std::chrono::high_resolution_clock::now();
+    RecSplit rs(keys, bucketSize
+                        #if defined(SIMD)
+                            , num_threads
+                        #endif
+                        );
+    unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - beginConstruction).count();
+
+    std::cout<<"Querying"<<std::endl;
+    uint64_t h = 0;
+    auto beginQueries = std::chrono::high_resolution_clock::now();
+    for (size_t i = 0; i < numQueries; i++) {
+        h ^= rs(bez::function::hash128_t(prng(), prng() ^ h));
+    }
+    auto queryDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - beginQueries).count();
+    DO_NOT_OPTIMIZE(h);
+
+    std::cout << "RESULT"
+              << " name=" << name
+              << " l=" << leafSize
+              << " b=" << bucketSize
+              << " rotations=" << rotations
+              << " numObjects=" << numObjects
+              << " numQueries=" << numQueries
+              << " queryDurationMs=" << queryDurationMs
+              << " constructionDurationMs=" << constructionDurationMs
+              << std::endl;
 }
 
-template<int FROM_LEAF, int TO_LEAF, bool USE_BIJECTIONS_ROTATE>
-void construct(std::ofstream &out) {
-	std::vector<hash128_t> keys;
-	for (const size_t bucket_size : bucket_sizes) {
-		for (size_t size : sizes) {
-			if (FROM_LEAF > 10 && size > 1'000'000)
-				continue;
-			for (int iteration = 0; iteration < ITERATIONS; ++iteration) {
-				for (uint64_t i = 0; i < size; i++) keys.push_back(hash128_t(next(), next()));
-
-#if defined(SIMD)
-				int num_threads = std::thread::hardware_concurrency();
-				num_threads = num_threads == 0 ? 1 : num_threads;
-				auto begin = chrono::high_resolution_clock::now();
-				RecSplit<FROM_LEAF, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size, num_threads);
-#else
-				auto begin = chrono::high_resolution_clock::now();
-				RecSplit<FROM_LEAF, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE> rs(keys, bucket_size);
-#endif
-
-				auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
-				csvPrint(out, FROM_LEAF, bucket_size, size, iteration, elapsed / (double)size, rs.getBitsPerKey(), benchmarkQueries(rs));
-				keys.clear();
-			}
-		}
-	}
-	keys.shrink_to_fit(); // Free memory before recursive call
-
-    if constexpr (FROM_LEAF < TO_LEAF)
-        construct<FROM_LEAF + 1, TO_LEAF, USE_BIJECTIONS_ROTATE>(out);
+template <size_t I>
+void dispatchLeafSize(size_t param) {
+    if constexpr (I <= 2) {
+        std::cerr<<"The parameter "<<param<<" for the leaf size was not compiled into this binary."<<std::endl;
+    } else if (I == param) {
+        if (rotations) {
+            construct<RecSplit<I, true>>();
+        } else {
+            construct<RecSplit<I, false>>();
+        }
+    } else {
+        dispatchLeafSize<I - 1>(param);
+    }
 }
 
-void constructAll() {
-	uint64_t s0 = s[0];
-	uint64_t s1 = s[1];
-	std::ofstream out(FILE_NAME + "NoRot.csv");
-	csvPrint(out, "leafSize", "bucketSize", "size", "iteration", "timingPerElement[ns]", "bitsPerKey", "queryTime[ns]");
-    construct<MIN_TEST_LEAF_SIZE, MAX_TEST_LEAF_SIZE, false>(out);
-	out.close();
+int constructAll(int argc, const char* const* argv) {
+    tlx::CmdlineParser cmd;
+    cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
+    cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
+    cmd.add_bool('r', "rotations", rotations, "Enable rotations");
+    cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
+    cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
 
-	s[0] = s0; // Reset seeds to ensure both variants receive the same elements for construction and queries
-	s[1] = s1;
-	std::ofstream outRot(FILE_NAME + "Rot.csv");
-	csvPrint(outRot, "leafSize", "bucketSize", "size", "iteration", "timingPerElement[ns]", "bitsPerKey", "queryTime[ns]");
-	construct<MIN_TEST_LEAF_SIZE, MAX_TEST_LEAF_SIZE, true>(outRot);
-	outRot.close();
+    if (!cmd.process(argc, argv)) {
+        return 1;
+    }
+    dispatchLeafSize<bez::function::MAX_LEAF_SIZE>(leafSize);
+    return 0;
 }
