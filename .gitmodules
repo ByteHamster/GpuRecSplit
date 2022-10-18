@@ -10,3 +10,9 @@
 [submodule "extlib/util"]
 	path = extlib/util
 	url = git@github.com:ByteHamster/Util.git
+[submodule "extlib/simpleRibbon"]
+	path = extlib/simpleRibbon
+	url = git@github.com:ByteHamster/SimpleRibbon.git
+[submodule "extlib/sux"]
+	path = extlib/sux
+	url = git@github.com:vigna/sux.git

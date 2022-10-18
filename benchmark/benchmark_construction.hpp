@@ -20,6 +20,8 @@ template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
 std::string name = "GpuRecSplit";
 #else
+#define SHOCKHASH_ENABLED
+#include <shockhash/ShockHash.h>
 #include <function/RecSplit.hpp>
 template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
 using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
@@ -30,20 +32,20 @@ std::string name = "RecSplit";
 
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
-bool rotations = false;
+std::string leafMethod = "bruteforce";
 size_t leafSize = 8;
 size_t bucketSize = 1000;
 size_t numThreads = 1;
 
-template<typename RecSplit>
+template<typename RecSplit, typename hash128_t>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
     util::XorShift64 prng(seed);
-	std::vector<bez::function::hash128_t> keys;
+	std::vector<hash128_t> keys;
     for (size_t i = 0; i < numObjects; i++) {
-        keys.push_back(bez::function::hash128_t(prng(), prng()));
+        keys.push_back(hash128_t(prng(), prng()));
     }
 
     std::cout<<"Constructing"<<std::endl;
@@ -60,7 +62,7 @@ void construct() {
     uint64_t h = 0;
     auto beginQueries = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < numQueries; i++) {
-        h ^= rs(bez::function::hash128_t(prng(), prng() ^ h));
+        h ^= rs(hash128_t(prng(), prng() ^ h));
     }
     auto queryDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginQueries).count();
@@ -70,7 +72,7 @@ void construct() {
               << " name=" << name
               << " l=" << leafSize
               << " b=" << bucketSize
-              << " rotations=" << rotations
+              << " leafMethod=" << leafMethod
               << " numObjects=" << numObjects
               << " numQueries=" << numQueries
               << " queryDurationMs=" << queryDurationMs
@@ -83,10 +85,18 @@ void dispatchLeafSize(size_t param) {
     if constexpr (I <= 2) {
         std::cerr<<"The parameter "<<param<<" for the leaf size was not compiled into this binary."<<std::endl;
     } else if (I == param) {
-        if (rotations) {
-            construct<RecSplit<I, true>>();
-        } else {
-            construct<RecSplit<I, false>>();
+        if (leafMethod == "bruteforce") {
+            construct<RecSplit<I, false>, bez::function::hash128_t>();
+        } else if (leafMethod == "rotations") {
+            construct<RecSplit<I, true>, bez::function::hash128_t>();
+        }
+#ifdef SHOCKHASH_ENABLED
+        else if (leafMethod == "cuckoo") {
+            construct<shockhash::ShockHash<I>, sux::function::hash128_t>();
+        }
+#endif
+        else {
+            std::cerr<<"Invalid leaf mode argument: "<<leafMethod<<std::endl;
         }
     } else {
         dispatchLeafSize<I - 1>(param);
@@ -97,7 +107,7 @@ int constructAll(int argc, const char* const* argv) {
     tlx::CmdlineParser cmd;
     cmd.add_bytes('n', "numObjects", numObjects, "Number of objects to construct with");
     cmd.add_bytes('q', "numQueries", numQueries, "Number of queries to measure");
-    cmd.add_bool('r', "rotations", rotations, "Enable rotations");
+    cmd.add_string('L', "leafMethod", leafMethod, "Method to use for leaf bijections");
     cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bytes('t', "numThreads", numThreads, "Threads to use for construction");
