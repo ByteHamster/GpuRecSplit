@@ -33,6 +33,7 @@ size_t numQueries = 1e6;
 bool rotations = false;
 size_t leafSize = 8;
 size_t bucketSize = 1000;
+size_t numThreads = 1;
 
 template<typename RecSplit>
 void construct() {
@@ -49,7 +50,7 @@ void construct() {
     auto beginConstruction = std::chrono::high_resolution_clock::now();
     RecSplit rs(keys, bucketSize
                         #if defined(SIMD)
-                            , num_threads
+                            , numThreads
                         #endif
                         );
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -99,6 +100,7 @@ int constructAll(int argc, const char* const* argv) {
     cmd.add_bool('r', "rotations", rotations, "Enable rotations");
     cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
+    cmd.add_bytes('t', "numThreads", numThreads, "Threads to use for construction");
 
     if (!cmd.process(argc, argv)) {
         return 1;
