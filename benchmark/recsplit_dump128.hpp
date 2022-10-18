@@ -22,6 +22,8 @@ template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLO
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
 #include <function/RecSplit.hpp>
+template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+using RecSplit = bez::function::RecSplit<LEAF_SIZE, AT>;
 #endif
 
 #define SAMPLES (11)
@@ -79,10 +81,10 @@ int build(int argc, char **argv) {
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
 	auto begin = chrono::high_resolution_clock::now();
-	bez::function::RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
+	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
 #else
 	auto begin = chrono::high_resolution_clock::now();
-	bez::function::RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
+	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
 #endif
 
 	auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
