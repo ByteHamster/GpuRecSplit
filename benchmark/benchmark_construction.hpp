@@ -11,20 +11,26 @@
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+template<size_t LEAF_SIZE>
+using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+template<size_t LEAF_SIZE>
+using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "SimdRecSplit";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+template<size_t LEAF_SIZE>
+using RecSplitRotate = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+template<size_t LEAF_SIZE>
+using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "GpuRecSplit";
 #else
 #define SHOCKHASH_ENABLED
 #include <shockhash/ShockHash.h>
 #include <function/RecSplit.hpp>
-template<size_t LEAF_SIZE, bool USE_BIJECTIONS_ROTATE>
-using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, USE_BIJECTIONS_ROTATE>;
+template<size_t LEAF_SIZE>
+using RecSplitRotate = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+template<size_t LEAF_SIZE>
+using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "RecSplit";
 #endif
 
@@ -80,26 +86,14 @@ void construct() {
               << std::endl;
 }
 
-template <size_t I>
+template <template<size_t> class RecSplit, typename hash128_t, size_t I>
 void dispatchLeafSize(size_t param) {
     if constexpr (I <= 2) {
         std::cerr<<"The parameter "<<param<<" for the leaf size was not compiled into this binary."<<std::endl;
     } else if (I == param) {
-        if (leafMethod == "bruteforce") {
-            construct<RecSplit<I, false>, bez::function::hash128_t>();
-        } else if (leafMethod == "rotations") {
-            construct<RecSplit<I, true>, bez::function::hash128_t>();
-        }
-#ifdef SHOCKHASH_ENABLED
-        else if (leafMethod == "cuckoo") {
-            construct<shockhash::ShockHash<I>, sux::function::hash128_t>();
-        }
-#endif
-        else {
-            std::cerr<<"Invalid leaf mode argument: "<<leafMethod<<std::endl;
-        }
+        construct<RecSplit<I>, hash128_t>();
     } else {
-        dispatchLeafSize<I - 1>(param);
+        dispatchLeafSize<RecSplit, hash128_t, I - 1>(param);
     }
 }
 
@@ -115,6 +109,19 @@ int constructAll(int argc, const char* const* argv) {
     if (!cmd.process(argc, argv)) {
         return 1;
     }
-    dispatchLeafSize<bez::function::MAX_LEAF_SIZE>(leafSize);
+
+    if (leafMethod == "bruteforce") {
+        dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+    } else if (leafMethod == "rotations") {
+        dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+    }
+#ifdef SHOCKHASH_ENABLED
+    else if (leafMethod == "cuckoo") {
+        dispatchLeafSize<shockhash::ShockHash, sux::function::hash128_t, shockhash::MAX_LEAF_SIZE>(leafSize);
+    }
+#endif
+    else {
+        std::cerr<<"Invalid leaf mode argument: "<<leafMethod<<std::endl;
+    }
     return 0;
 }
