@@ -488,15 +488,9 @@ class AbstractParallelRecSplit {
 	 */
 	size_t operator()(const string &key) { return operator()(first_hash(key.c_str(), key.size())); }
 
-	/** Returns the number of keys used to build this GPURecSplit instance. */
-	inline size_t size() { return this->keys_count; }
-
-	/** Returns the number of bits per key this instance occupies. */
-	double getBitsPerKey() {
-		double ef_sizes = (double)ef.bitCountCumKeys() / keys_count;
-		double ef_bits = (double)ef.bitCountPosition() / keys_count;
-		double rice_desc = (double)descriptors.getBits() / keys_count;
-		return ef_sizes + ef_bits + rice_desc;
+	/** Returns an estimate of the size in bits of this structure. */
+	size_t getBits() {
+		return ef.bitCountCumKeys() + ef.bitCountPosition() + descriptors.getBits() + 8 * sizeof(*this);
 	}
 };
 

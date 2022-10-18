@@ -15,14 +15,14 @@ template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string name = "SimdRecSplit";
+std::string architecture = "Simd";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string name = "GpuRecSplit";
+std::string architecture = "Gpu";
 #else
 #define SHOCKHASH_ENABLED
 #include <shockhash/ShockHash.h>
@@ -31,7 +31,7 @@ template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string name = "RecSplit";
+std::string architecture = "PlainCpu";
 #endif
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory");
@@ -75,7 +75,7 @@ void construct() {
     DO_NOT_OPTIMIZE(h);
 
     std::cout << "RESULT"
-              << " name=" << name
+              << " architecture=" << architecture
               << " l=" << leafSize
               << " b=" << bucketSize
               << " leafMethod=" << leafMethod
@@ -83,6 +83,7 @@ void construct() {
               << " numQueries=" << numQueries
               << " queryDurationMs=" << queryDurationMs
               << " constructionDurationMs=" << constructionDurationMs
+              << " spaceUsage=" << (double) rs.getBits() / numObjects
               << std::endl;
 }
 

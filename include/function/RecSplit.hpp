@@ -467,12 +467,9 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
 	/** Returns the number of keys used to build this RecSplit instance. */
 	inline size_t size() { return this->keys_count; }
 
-	/** Returns the number of bits per key this instance occupies. */
-	double getBitsPerKey() {
-		double ef_sizes = (double)ef.bitCountCumKeys() / keys_count;
-		double ef_bits = (double)ef.bitCountPosition() / keys_count;
-		double rice_desc = (double)descriptors.getBits() / keys_count;
-		return ef_sizes + ef_bits + rice_desc;
+	/** Returns an estimate of the size in bits of this structure. */
+	size_t getBits() {
+		return ef.bitCountCumKeys() + ef.bitCountPosition() + descriptors.getBits() + 8 * sizeof(*this);
 	}
 
   private:
