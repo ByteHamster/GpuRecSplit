@@ -14,7 +14,7 @@ target_include_directories(gcem INTERFACE extlib/gcem/include)
 # Standard RecSplit
 add_library(RecSplit INTERFACE)
 target_compile_features(RecSplit INTERFACE cxx_std_20)
-target_include_directories(RecSplit INTERFACE src)
+target_include_directories(RecSplit INTERFACE include)
 target_link_libraries(RecSplit INTERFACE gcem)
 target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
@@ -25,7 +25,7 @@ if (CMAKE_CUDA_COMPILER)
 	enable_language(CUDA)
 
 	add_library(GPURecSplit INTERFACE)
-	target_include_directories(GPURecSplit INTERFACE src)
+	target_include_directories(GPURecSplit INTERFACE include)
 	target_compile_features(GPURecSplit INTERFACE cxx_std_20)
 	target_compile_options(GPURecSplit INTERFACE --expt-relaxed-constexpr)
 	target_compile_options(GPURecSplit INTERFACE -Xcompiler="-march=native")
@@ -35,7 +35,7 @@ endif()
 
 # SIMDRecSplit
 add_library(SIMDRecSplit INTERFACE)
-target_include_directories(SIMDRecSplit INTERFACE src)
+target_include_directories(SIMDRecSplit INTERFACE include)
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
 target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass)
