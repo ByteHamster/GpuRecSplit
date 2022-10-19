@@ -32,7 +32,7 @@ using namespace std::chrono;
 // Assumed *maximum* size of a bucket. Works with high probability up to average bucket size ~2000.
 static const int MAX_BUCKET_SIZE = 3000;
 static const int MAX_FANOUT = 32;
-static const int MAX_LEAF_SIZE = 35;
+static const int MAX_LEAF_SIZE = 42;
 
 #if defined(STATS)
 static uint64_t bij_unary, bij_fixed;
@@ -48,10 +48,11 @@ static const uint64_t start_seed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x
 
 // Optimal Golomb-Rice parameters for leaves.
 static constexpr uint8_t bij_memo[MAX_LEAF_SIZE + 1] = {
-        0, 0, 0, 0, 0, 0, 1, 1, 2, 2,
-        2, 3, 3, 4, 4, 4, 5, 5, 6, 6,
-        7, 7, 8, 8, 9, 9, 9, 10, 10, 10,
-        11, 11, 11, 12, 12, 12};
+        0, 0, 0, 0, 0, 0, 1, 1, 2, 2, // 0..9
+        2, 3, 3, 4, 4, 4, 5, 5, 6, 6, // 10..19
+        7, 7, 8, 8, 9, 9, 9, 10, 10, 10, // 20..29
+        11, 11, 12, 12, 13, 13, 13, 14, 15, 15, // 30..39
+        15, 16, 16}; // 40..42
 
 template <size_t LEAF_SIZE> class SplittingStrategy {
     public:
