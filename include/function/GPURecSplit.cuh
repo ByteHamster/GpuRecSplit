@@ -400,14 +400,14 @@ class GPURecSplit
 	using Superclass::memo;
 	using Superclass::use_bijections_rotate;
 
-	static constexpr int NUM_THREADS = 8;
 	static constexpr int NUM_STREAMS = 128;
-	static constexpr int NUM_STREAMS_PER_THREAD = NUM_STREAMS / NUM_THREADS; // per thread
 	static constexpr int HIGHER_LEVEL_BLOCK_SIZE = 64;
 	static constexpr int UPPER_AGGR_BLOCK_SIZE = 256;
 	static constexpr int LOWER_AGGR_BLOCK_SIZE = 256;
 	static constexpr int LEAF_BLOCK_SIZE = 512;
 
+    const int numThreads = 8;
+    const int numStreamsPerThread = NUM_STREAMS / numThreads;
   public:
 	GPURecSplit() {}
 
@@ -420,7 +420,8 @@ class GPURecSplit
 	 * 100 to 2000, with smaller buckets giving slightly larger but faster
 	 * functions.
 	 */
-	GPURecSplit(const vector<string> &keys, const size_t bucket_size) {
+	GPURecSplit(const vector<string> &keys, const size_t bucket_size, const int numThreads)
+            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
 		this->bucket_size = bucket_size;
 		this->keys_count = keys.size();
 		hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
@@ -441,7 +442,8 @@ class GPURecSplit
 	 * 100 to 2000, with smaller buckets giving slightly larger but faster
 	 * functions.
 	 */
-	GPURecSplit(vector<hash128_t> &keys, const size_t bucket_size) {
+	GPURecSplit(vector<hash128_t> &keys, const size_t bucket_size, const int numThreads)
+            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
 		this->bucket_size = bucket_size;
 		this->keys_count = keys.size();
 		hash_gen(&keys[0]);
@@ -454,7 +456,8 @@ class GPURecSplit
 	 * @param input an open input stream returning a list of keys, one per line.
 	 * @param bucket_size the desired bucket size.
 	 */
-	GPURecSplit(ifstream& input, const size_t bucket_size) {
+	GPURecSplit(ifstream& input, const size_t bucket_size, const int numThreads)
+            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
 		this->bucket_size = bucket_size;
 		vector<hash128_t> h;
 		for(string key; getline(input, key);) h.push_back(first_hash(key.c_str(), key.size()));
@@ -641,38 +644,38 @@ class GPURecSplit
 		uint64_t *device_results = device_buckets + NUM_STREAMS * MAX_BUCKET_SIZE;
 
 		vector<thread> threads;
-		threads.reserve(NUM_THREADS);
+		threads.reserve(numThreads);
 		mutex mtx;
 		condition_variable condition;
 		int next_thread_to_append_builder = 0;
 		bucket_pos_acc[0] = 0;
 
-		for (int tid = 0; tid < NUM_THREADS; ++tid) {
+		for (int tid = 0; tid < numThreads; ++tid) {
 			threads.emplace_back([&, tid] {
 				typename RiceBitVector<AT>::Builder local_builder;
 				vector<uint32_t> unary;
-				vector<array<uint32_t, 3>> result_counts(NUM_STREAMS_PER_THREAD);
-				cudaStream_t streams[NUM_STREAMS_PER_THREAD];
-				size_t begin = tid * this->nbuckets / NUM_THREADS;
-				size_t end = (tid + 1) * this->nbuckets / NUM_THREADS;
+				vector<array<uint32_t, 3>> result_counts(numStreamsPerThread);
+				cudaStream_t streams[numStreamsPerThread];
+				size_t begin = tid * this->nbuckets / numThreads;
+				size_t end = (tid + 1) * this->nbuckets / numThreads;
 				size_t i;
 				for (i = begin; i < end; i++) {
-					const size_t current_stream_id = i % NUM_STREAMS_PER_THREAD;
-					const int bucket_offset = (tid * NUM_STREAMS_PER_THREAD + current_stream_id) * MAX_BUCKET_SIZE;
+					const size_t current_stream_id = i % numStreamsPerThread;
+					const int bucket_offset = (tid * numStreamsPerThread + current_stream_id) * MAX_BUCKET_SIZE;
 					uint64_t *bucket = host_buckets + bucket_offset;
 					cudaStream_t &current_stream = streams[current_stream_id];
 
-					if (i - begin < NUM_STREAMS_PER_THREAD) {
+					if (i - begin < numStreamsPerThread) {
 						checkCudaError(cudaStreamCreate(&current_stream));
 					} else {
-						size_t bucket_size = bucket_size_acc[i - NUM_STREAMS_PER_THREAD + 1] - bucket_size_acc[i - NUM_STREAMS_PER_THREAD];
+						size_t bucket_size = bucket_size_acc[i - numStreamsPerThread + 1] - bucket_size_acc[i - numStreamsPerThread];
 						if (bucket_size > 1) {
 							checkCudaError(cudaStreamSynchronize(current_stream));
 							unpackResults(bucket_size, host_results + bucket_offset, local_builder, unary, result_counts[current_stream_id]);
 							local_builder.appendUnaryAll(unary);
 							unary.clear();
 						}
-						bucket_pos_acc[i + 1 - NUM_STREAMS_PER_THREAD] = local_builder.getBits();
+						bucket_pos_acc[i + 1 - numStreamsPerThread] = local_builder.getBits();
 					}
 
 					uint32_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
@@ -692,17 +695,17 @@ class GPURecSplit
 					maxsize = max(maxsize, s);
 #endif
 				}
-				int _num_streams = NUM_STREAMS_PER_THREAD;
-				if (end - begin < NUM_STREAMS_PER_THREAD) {
+				int _num_streams = numStreamsPerThread;
+				if (end - begin < numStreamsPerThread) {
 					i = begin;
 					_num_streams = 0;
 				}
 				for (; i < end + _num_streams; i++) {
 					size_t bucket_size = bucket_size_acc[i - _num_streams + 1] - bucket_size_acc[i - _num_streams];
 					if (bucket_size > 1) {
-						const size_t current_stream_id = i % NUM_STREAMS_PER_THREAD;
+						const size_t current_stream_id = i % numStreamsPerThread;
 						cudaStream_t &currentStream = streams[current_stream_id];
-						const int bucket_offset = (tid * NUM_STREAMS_PER_THREAD + current_stream_id) * MAX_BUCKET_SIZE;
+						const int bucket_offset = (tid * numStreamsPerThread + current_stream_id) * MAX_BUCKET_SIZE;
 						checkCudaError(cudaStreamSynchronize(currentStream));
 						unpackResults(bucket_size, host_results + bucket_offset, local_builder, unary, result_counts[current_stream_id]);
 						local_builder.appendUnaryAll(unary);

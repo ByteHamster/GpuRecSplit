@@ -77,7 +77,7 @@ int build(int argc, char **argv) {
 #define ALLOC_TYPE_APPEND
 #endif
 
-#if defined(SIMD)
+#if (defined(SIMD) || defined(GPU))
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
 	auto begin = chrono::high_resolution_clock::now();
