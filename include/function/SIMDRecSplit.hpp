@@ -678,6 +678,55 @@ class SIMDRecSplit
         }
     }
 
+    void compute_thread(int tid, int num_threads, mutex &mtx, condition_variable &condition,
+                        vector<uint64_t> &bucket_size_acc, vector<uint64_t> &bucket_pos_acc,
+                        vector<uint64_t> &sorted_keys, int &next_thread_to_append_builder,
+                        typename RiceBitVector<AT>::Builder &builder) {
+        typename RiceBitVector<AT>::Builder local_builder;
+        vector<uint32_t> unary;
+        vector<uint64_t> temp(MAX_BUCKET_SIZE);
+        size_t begin = tid * this->nbuckets / num_threads;
+        size_t end = (tid + 1) * this->nbuckets / num_threads;
+        for (size_t i = begin; i < end; ++i) {
+            const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
+            if (s > 1) {
+                recSplit(sorted_keys, temp, bucket_size_acc[i], s, local_builder, unary);
+                local_builder.appendUnaryAll(unary);
+                unary.clear();
+            }
+            bucket_pos_acc[i + 1] = local_builder.getBits();
+#ifdef MORESTATS
+            auto upper_leaves = (s + _leaf - 1) / _leaf;
+            auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
+            auto upper_s = _leaf * pow(2, upper_height);
+            ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
+            ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
+            ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
+            minsize = min(minsize, s);
+            maxsize = max(maxsize, s);
+#endif
+        }
+        if (tid == 0) {
+            builder = std::move(local_builder);
+            lock_guard<mutex> lock(mtx);
+            next_thread_to_append_builder = 1;
+            condition.notify_all();
+        } else {
+            uint64_t prev_bucket_pos;
+            {
+                unique_lock<mutex> lock(mtx);
+                condition.wait(lock, [&] { return next_thread_to_append_builder == tid; });
+                prev_bucket_pos = builder.getBits();
+                builder.appendRiceBitVector(local_builder);
+                next_thread_to_append_builder = tid + 1;
+                condition.notify_all();
+            }
+            for (size_t i = begin + 1; i < end + 1; ++i) {
+                bucket_pos_acc[i] += prev_bucket_pos;
+            }
+        }
+    }
+
     void hash_gen(hash128_t *hashes, int num_threads) {
 #ifdef MORESTATS
         time_bij = 0;
@@ -723,55 +772,22 @@ class SIMDRecSplit
         condition_variable condition;
         int next_thread_to_append_builder = 0;
         bucket_pos_acc[0] = 0;
-        for (int tid = 0; tid < num_threads; ++tid) {
-            threads.emplace_back([&, tid] {
-                typename RiceBitVector<AT>::Builder local_builder;
-                vector<uint32_t> unary;
-                vector<uint64_t> temp(MAX_BUCKET_SIZE);
-                size_t begin = tid * this->nbuckets / num_threads;
-                size_t end = (tid + 1) * this->nbuckets / num_threads;
-                for (size_t i = begin; i < end; ++i) {
-                    const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
-                    if (s > 1) {
-                        recSplit(sorted_keys, temp, bucket_size_acc[i], s, local_builder, unary);
-                        local_builder.appendUnaryAll(unary);
-                        unary.clear();
-                    }
-                    bucket_pos_acc[i + 1] = local_builder.getBits();
-#ifdef MORESTATS
-                    auto upper_leaves = (s + _leaf - 1) / _leaf;
-                    auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
-                    auto upper_s = _leaf * pow(2, upper_height);
-                    ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
-                    ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
-                    ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
-                    minsize = min(minsize, s);
-                    maxsize = max(maxsize, s);
-#endif
-                }
-                if (tid == 0) {
-                    builder = std::move(local_builder);
-                    lock_guard<mutex> lock(mtx);
-                    next_thread_to_append_builder = 1;
-                    condition.notify_all();
-                } else {
-                    uint64_t prev_bucket_pos;
-                    {
-                        unique_lock<mutex> lock(mtx);
-                        condition.wait(lock, [&] { return next_thread_to_append_builder == tid; });
-                        prev_bucket_pos = builder.getBits();
-                        builder.appendRiceBitVector(local_builder);
-                        next_thread_to_append_builder = tid + 1;
-                        condition.notify_all();
-                    }
-                    for (size_t i = begin + 1; i < end + 1; ++i) {
-                        bucket_pos_acc[i] += prev_bucket_pos;
-                    }
-                }
-            });
+        if (num_threads == 1) {
+             compute_thread(0, num_threads, mtx, condition,
+                   bucket_size_acc, bucket_pos_acc, sorted_keys,
+                   next_thread_to_append_builder, builder);
+        } else {
+            for (int tid = 0; tid < num_threads; ++tid) {
+                threads.emplace_back([&, tid] {
+                    compute_thread(tid, num_threads, mtx, condition,
+                                   bucket_size_acc, bucket_pos_acc, sorted_keys,
+                                   next_thread_to_append_builder, builder);
+                });
+            }
+            for (auto &thread: threads) {
+                thread.join();
+            }
         }
-        for (auto &thread : threads)
-            thread.join();
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         this->descriptors = builder.build();
         this->ef = DoubleEF<AT, true>(bucket_size_acc, bucket_pos_acc);
