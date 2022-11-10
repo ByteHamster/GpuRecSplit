@@ -82,6 +82,9 @@ static uint64_t max_bij_code, min_bij_code, sum_bij_codes;
 static uint64_t sum_depths;
 static uint64_t time_bij;
 static uint64_t time_split[MAX_LEVEL_TIME];
+size_t minsize = 0, maxsize = 0;
+double ub_split_bits = 0, ub_bij_bits = 0;
+double ub_split_evals = 0;
 #endif
 
 #ifndef M_PI

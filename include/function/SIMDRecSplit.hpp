@@ -89,11 +89,6 @@ constexpr double MIDSTOP_FACTOR = 2.3;
 #define SIMDRS_RESTRICT /* no op */
 #endif
 
-#ifdef MORESTATS
-// Does not compile with MORESTATS because that area of the code does not use this->xy to access parent class
-#undef MORESTATS
-#endif
-
 namespace bez::function {
 
 using namespace std;
@@ -603,7 +598,7 @@ class SIMDRecSplit
         auto b = bij_memo_golomb[m];
         auto log2b = lambda(b);
         bij_unary_golomb += x / b + 1;
-        bij_fixed_golomb += x % b < ((1 << log2b + 1) - b) ? log2b : log2b + 1;
+        bij_fixed_golomb += x % b < ((1 << (log2b + 1)) - b) ? log2b : log2b + 1;
 #endif
     }
 
@@ -652,7 +647,7 @@ class SIMDRecSplit
             num_split_trials += x + 1;
             double e_trials = 1;
             size_t aux = m;
-            SplitStrat strat{m};
+            SplittingStrategy<LEAF_SIZE> strat(m);
             auto v = strat.begin();
             for (int i = 0; i < strat.fanout(); ++i, ++v) {
                 e_trials *= pow((double)m / *v, *v);
@@ -673,7 +668,7 @@ class SIMDRecSplit
             auto b = split_golomb_b<LEAF_SIZE>(m);
             auto log2b = lambda(b);
             split_unary_golomb += x / b + 1;
-            split_fixed_golomb += x % b < ((1ULL << log2b + 1) - b) ? log2b : log2b + 1;
+            split_fixed_golomb += x % b < ((1ULL << (log2b + 1)) - b) ? log2b : log2b + 1;
 #endif
         }
     }
@@ -738,9 +733,11 @@ class SIMDRecSplit
         min_bij_code = 1ULL << 63;
         max_bij_code = sum_bij_codes = 0;
         sum_depths = 0;
-        size_t minsize = keys_count, maxsize = 0;
-        double ub_split_bits = 0, ub_bij_bits = 0;
-        double ub_split_evals = 0;
+        minsize = this->keys_count;
+        maxsize = 0;
+        ub_split_bits = 0;
+        ub_bij_bits = 0;
+        ub_split_evals = 0;
 
         auto total_start_time = high_resolution_clock::now();
 #endif
@@ -841,7 +838,7 @@ class SIMDRecSplit
         printf("Total evals:       %16lld\n", num_split_evals + tot_bij_evals);
 
         printf("\n");
-        printf("Average depth:        %f\n", (double)sum_depths / keys_count);
+        printf("Average depth:        %f\n", (double)sum_depths / this->keys_count);
         printf("\n");
         printf("Trials per split:     %16.3f\n", (double)num_split_trials / split_count);
         printf("Exp trials per split: %16.3f\n", (double)expected_split_trials / split_count);
@@ -857,7 +854,7 @@ class SIMDRecSplit
         printf("Unary bits per split: %10.5f\n", (double)split_unary / split_count);
         printf("Fixed bits per split: %10.5f\n", (double)split_fixed / split_count);
         printf("Total bits per split: %10.5f\n", (double)(split_unary + split_fixed) / split_count);
-        printf("Total bits per key:   %10.5f\n", (double)(bij_unary + bij_fixed + split_unary + split_fixed) / keys_count);
+        printf("Total bits per key:   %10.5f\n", (double)(bij_unary + bij_fixed + split_unary + split_fixed) / this->keys_count);
 
         printf("\n");
         printf("Unary bits per bij (Golomb): %10.5f\n", (double)bij_unary_golomb / tot_bij_count);
@@ -868,7 +865,7 @@ class SIMDRecSplit
         printf("Unary bits per split (Golomb): %10.5f\n", (double)split_unary_golomb / split_count);
         printf("Fixed bits per split (Golomb): %10.5f\n", (double)split_fixed_golomb / split_count);
         printf("Total bits per split (Golomb): %10.5f\n", (double)(split_unary_golomb + split_fixed_golomb) / split_count);
-        printf("Total bits per key (Golomb):   %10.5f\n", (double)(bij_unary_golomb + bij_fixed_golomb + split_unary_golomb + split_fixed_golomb) / keys_count);
+        printf("Total bits per key (Golomb):   %10.5f\n", (double)(bij_unary_golomb + bij_fixed_golomb + split_unary_golomb + split_fixed_golomb) / this->keys_count);
 
         printf("\n");
 

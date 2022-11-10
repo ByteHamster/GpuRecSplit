@@ -406,8 +406,8 @@ class GPURecSplit
 	static constexpr int LOWER_AGGR_BLOCK_SIZE = 256;
 	static constexpr int LEAF_BLOCK_SIZE = 512;
 
-    const int numThreads = 8;
-    const int numStreamsPerThread = NUM_STREAMS / numThreads;
+    const size_t numThreads = 8;
+    const size_t numStreamsPerThread = NUM_STREAMS / numThreads;
   public:
 	GPURecSplit() {}
 
