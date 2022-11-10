@@ -89,10 +89,7 @@ constexpr double MIDSTOP_FACTOR = 2.3;
 #define SIMDRS_RESTRICT /* no op */
 #endif
 
-#ifdef MORESTATS
-// Does not compile with MORESTATS because that area of the code does not use this->xy to access parent class
-#undef MORESTATS
-#endif
+#define MORESTATS
 
 namespace bez::function {
 
@@ -258,7 +255,7 @@ class SIMDRecSplit
                 // seems equal to "counter += remap(first, first + FULL_VEC_64_COUNT, m) < split" and faster than if_sub
                 counter = if_add(remap(first, first + FULL_VEC_64_COUNT, m) < split, counter, uint32_t(-1));
 #ifdef MORESTATS
-                ++num_split_evals;
+                ++this->num_split_evals;
 #endif
             }
             found_result = counter == -split; // -split since true is represented as -1 in vectors
@@ -297,7 +294,7 @@ class SIMDRecSplit
         unary.push_back(x >> log2golomb);
 
 #ifdef MORESTATS
-        time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+        this->time_split[min(this->MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
         return x;
     }
@@ -339,7 +336,7 @@ class SIMDRecSplit
                     const FullVecUi remapped = remap(first, first + FULL_VEC_64_COUNT, m) / const_uint(SPLIT);
                     count += lookup<min(_MAX_FANOUT, 5)>(remapped, &aggr_level_count_lookup[4]);
 #ifdef MORESTATS
-                    ++num_split_evals;
+                    ++this->num_split_evals;
 #endif
                 }
                 found_result = count == found;
@@ -364,7 +361,7 @@ class SIMDRecSplit
                     count_low += lookup<_MAX_FANOUT>(remapped, &aggr_level_count_lookup[4]);
                     count_high += lookup<_MAX_FANOUT>(remapped, &aggr_level_count_lookup[0]);
 #ifdef MORESTATS
-                    ++num_split_evals;
+                    ++this->num_split_evals;
 #endif
                 }
                 found_result = count_low == found_low & count_high == found_high;
@@ -403,7 +400,7 @@ class SIMDRecSplit
         unary.push_back(x >> log2golomb);
 
 #ifdef MORESTATS
-        time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+        this->time_split[min(this->MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
         return x;
     }
@@ -432,7 +429,7 @@ class SIMDRecSplit
         constexpr uint64_t SEED = start_seed[NUM_START_SEEDS - 1];
         uint64_t x = SEED;
 #ifdef MORESTATS
-        sum_depths += m * level;
+        this->sum_depths += m * level;
         auto start_time = high_resolution_clock::now();
 #endif
         if (use_bijections_rotate && m == LEAF_SIZE) {
@@ -512,7 +509,7 @@ class SIMDRecSplit
                         mask |= powerOfTwo(remapped);
                     }
 #ifdef MORESTATS
-                    num_bij_evals[m] += m;
+                    this->num_bij_evals[m] += m;
 #endif
                     if (horizontal_or(mask == found)) break;
                     x += FULL_VEC_32_COUNT;
@@ -535,7 +532,7 @@ class SIMDRecSplit
                         mask |= powerOfTwo(remapped);
                     }
 #ifdef MORESTATS
-                    num_bij_evals[m] += midstop;
+                    this->num_bij_evals[m] += midstop;
 #endif
                     bool brk = false;
 #ifdef SIMDRS_512_BIT_POPCNT
@@ -584,26 +581,26 @@ class SIMDRecSplit
             }
         }
 #ifdef MORESTATS
-        time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+        this->time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
         x -= SEED;
         const auto log2golomb = golomb_param(m);
         builder.appendFixed(x, log2golomb);
         unary.push_back(x >> log2golomb);
 #ifdef MORESTATS
-        bij_count[m]++;
-        num_bij_trials[m] += x + 1;
-        bij_unary += 1 + (x >> log2golomb);
-        bij_fixed += log2golomb;
+        this->bij_count[m]++;
+        this->num_bij_trials[m] += x + 1;
+        this->bij_unary += 1 + (x >> log2golomb);
+        this->bij_fixed += log2golomb;
 
-        min_bij_code = min(min_bij_code, x);
-        max_bij_code = max(max_bij_code, x);
-        sum_bij_codes += x;
+        this->min_bij_code = min(this->min_bij_code, x);
+        this->max_bij_code = max(this->max_bij_code, x);
+        this->sum_bij_codes += x;
 
-        auto b = bij_memo_golomb[m];
+        auto b = this->bij_memo_golomb[m];
         auto log2b = lambda(b);
-        bij_unary_golomb += x / b + 1;
-        bij_fixed_golomb += x % b < ((1 << log2b + 1) - b) ? log2b : log2b + 1;
+        this->bij_unary_golomb += x / b + 1;
+        this->bij_fixed_golomb += x % b < ((1 << log2b + 1) - b) ? log2b : log2b + 1;
 #endif
     }
 
@@ -621,7 +618,7 @@ class SIMDRecSplit
                 if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1);
 #ifdef MORESTATS
                 else
-                    sum_depths += level;
+                    this->sum_depths += level;
 #endif
             } else if (m > lower_aggr) { // 2nd aggregation level
                 x = aggrLevel<upper_aggr / lower_aggr, lower_aggr, start_seed[NUM_START_SEEDS - 3]>(bucket, temp, start, m, builder, unary, level);
@@ -632,7 +629,7 @@ class SIMDRecSplit
                 if (m - i > 1) recSplit(bucket, temp, start + i, m - i, builder, unary, level + 1);
 #ifdef MORESTATS
                 else
-                    sum_depths += level;
+                    this->sum_depths += level;
 #endif
             } else { // First aggregation level, m <= lower_aggr
                 x = aggrLevel<lower_aggr / _leaf, _leaf, start_seed[NUM_START_SEEDS - 2]>(bucket, temp, start, m, builder, unary, level);
@@ -643,37 +640,36 @@ class SIMDRecSplit
                 if (m - i > 1) leafLevel(bucket, start + i, m - i, builder, unary, level + 1);
 #ifdef MORESTATS
                 else
-                    sum_depths += level;
+                    this->sum_depths += level;
 #endif
             }
 
 #ifdef MORESTATS
-            ++split_count;
-            num_split_trials += x + 1;
+            ++this->split_count;
+            this->num_split_trials += x + 1;
             double e_trials = 1;
             size_t aux = m;
-            SplitStrat strat{m};
-            auto v = strat.begin();
-            for (int i = 0; i < strat.fanout(); ++i, ++v) {
+            auto v = this->strat.begin();
+            for (int i = 0; i < this->strat.fanout(); ++i, ++v) {
                 e_trials *= pow((double)m / *v, *v);
                 for (size_t j = *v; j > 0; --j, --aux) {
                     e_trials *= (double)j / aux;
                 }
             }
-            expected_split_trials += (size_t)e_trials;
-            expected_split_evals += (size_t)e_trials * m;
+            this->expected_split_trials += (size_t)e_trials;
+            this->expected_split_evals += (size_t)e_trials * m;
             const auto log2golomb = golomb_param(m);
-            split_unary += 1 + (x >> log2golomb);
-            split_fixed += log2golomb;
+            this->split_unary += 1 + (x >> log2golomb);
+            this->split_fixed += log2golomb;
 
-            min_split_code = min(min_split_code, x);
-            max_split_code = max(max_split_code, x);
-            sum_split_codes += x;
+            this->min_split_code = min(this->min_split_code, x);
+            this->max_split_code = max(this->max_split_code, x);
+            this->sum_split_codes += x;
 
             auto b = split_golomb_b<LEAF_SIZE>(m);
             auto log2b = lambda(b);
-            split_unary_golomb += x / b + 1;
-            split_fixed_golomb += x % b < ((1ULL << log2b + 1) - b) ? log2b : log2b + 1;
+            this->split_unary_golomb += x / b + 1;
+            this->split_fixed_golomb += x % b < ((1ULL << log2b + 1) - b) ? log2b : log2b + 1;
 #endif
         }
     }
@@ -699,11 +695,11 @@ class SIMDRecSplit
             auto upper_leaves = (s + _leaf - 1) / _leaf;
             auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
             auto upper_s = _leaf * pow(2, upper_height);
-            ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
-            ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
-            ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
-            minsize = min(minsize, s);
-            maxsize = max(maxsize, s);
+            this->ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
+            this->ub_bij_bits += upper_leaves * _leaf * (this->log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
+            this->ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
+            this->minsize = min(this->minsize, s);
+            this->maxsize = max(this->maxsize, s);
 #endif
         }
         if (tid == 0) {
@@ -729,16 +725,16 @@ class SIMDRecSplit
 
     void hash_gen(hash128_t *hashes, int num_threads) {
 #ifdef MORESTATS
-        time_bij = 0;
-        memset(time_split, 0, sizeof time_split);
-        split_unary = split_fixed = 0;
-        bij_unary = bij_fixed = 0;
-        min_split_code = 1ULL << 63;
-        max_split_code = sum_split_codes = 0;
-        min_bij_code = 1ULL << 63;
-        max_bij_code = sum_bij_codes = 0;
-        sum_depths = 0;
-        size_t minsize = keys_count, maxsize = 0;
+        this->time_bij = 0;
+        memset(this->time_split, 0, sizeof this->time_split);
+        this->split_unary = this->split_fixed = 0;
+        this->bij_unary = this->bij_fixed = 0;
+        this->min_split_code = 1ULL << 63;
+        this->max_split_code = this->sum_split_codes = 0;
+        this->min_bij_code = 1ULL << 63;
+        this->max_bij_code = this->sum_bij_codes = 0;
+        this->sum_depths = 0;
+        size_t minsize = this->keys_count, maxsize = 0;
         double ub_split_bits = 0, ub_bij_bits = 0;
         double ub_split_evals = 0;
 
@@ -813,10 +809,10 @@ class SIMDRecSplit
         printf("\n");
         printf("Total time: %13.3f ms\n", duration_cast<nanoseconds>(high_resolution_clock::now() - total_start_time).count() * 1E-6);
         printf("Sorting time: %13.3f ms\n", sorting_time * 1E-6);
-        printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
-        for (int i = 0; i < MAX_LEVEL_TIME; i++) {
-            if (time_split[i] > 0) {
-                printf("Split level %d: %10.3f ms\n", i, time_split[i] * 1E-6);
+        printf("Bijections: %13.3f ms\n", this->time_bij * 1E-6);
+        for (int i = 0; i < this->MAX_LEVEL_TIME; i++) {
+            if (this->time_split[i] > 0) {
+                printf("Split level %d: %10.3f ms\n", i, this->time_split[i] * 1E-6);
             }
         }
 
@@ -824,57 +820,57 @@ class SIMDRecSplit
         printf("\n");
         printf("Bij               count              trials                 exp               evals                 exp           tot evals\n");
         for (int i = 0; i < MAX_LEAF_SIZE; i++) {
-            if (num_bij_trials[i] != 0) {
-                tot_bij_count += bij_count[i];
-                tot_bij_evals += num_bij_evals[i];
-                printf("%-3d%20d%20.2f%20.2f%20.2f%20.2f%20lld\n", i, bij_count[i], (double)num_bij_trials[i] / bij_count[i], pow(i, i) / fact, (double)num_bij_evals[i] / bij_count[i],
-                       (_leaf <= 8 ? i : bij_midstop[i]) * pow(i, i) / fact, num_bij_evals[i]);
+            if (this->num_bij_trials[i] != 0) {
+                tot_bij_count += this->bij_count[i];
+                tot_bij_evals += this->num_bij_evals[i];
+                printf("%-3d%20d%20.2f%20.2f%20.2f%20.2f%20lld\n", i, this->bij_count[i], (double)this->num_bij_trials[i] / this->bij_count[i], pow(i, i) / fact, (double)this->num_bij_evals[i] / this->bij_count[i],
+                       (_leaf <= 8 ? i : bij_midstop[i]) * pow(i, i) / fact, this->num_bij_evals[i]);
             }
             fact *= (i + 1);
         }
 
         printf("\n");
-        printf("Split count:       %16zu\n", split_count);
+        printf("Split count:       %16zu\n", this->split_count);
 
-        printf("Total split evals: %16lld\n", num_split_evals);
+        printf("Total split evals: %16lld\n", this->num_split_evals);
         printf("Total bij evals:   %16lld\n", tot_bij_evals);
-        printf("Total evals:       %16lld\n", num_split_evals + tot_bij_evals);
+        printf("Total evals:       %16lld\n", this->num_split_evals + tot_bij_evals);
 
         printf("\n");
-        printf("Average depth:        %f\n", (double)sum_depths / keys_count);
+        printf("Average depth:        %f\n", (double)this->sum_depths / this->keys_count);
         printf("\n");
-        printf("Trials per split:     %16.3f\n", (double)num_split_trials / split_count);
-        printf("Exp trials per split: %16.3f\n", (double)expected_split_trials / split_count);
-        printf("Evals per split:      %16.3f\n", (double)num_split_evals / split_count);
-        printf("Exp evals per split:  %16.3f\n", (double)expected_split_evals / split_count);
+        printf("Trials per split:     %16.3f\n", (double)this->num_split_trials / this->split_count);
+        printf("Exp trials per split: %16.3f\n", (double)this->expected_split_trials / this->split_count);
+        printf("Evals per split:      %16.3f\n", (double)this->num_split_evals / this->split_count);
+        printf("Exp evals per split:  %16.3f\n", (double)this->expected_split_evals / this->split_count);
 
         printf("\n");
-        printf("Unary bits per bij: %10.5f\n", (double)bij_unary / tot_bij_count);
-        printf("Fixed bits per bij: %10.5f\n", (double)bij_fixed / tot_bij_count);
-        printf("Total bits per bij: %10.5f\n", (double)(bij_unary + bij_fixed) / tot_bij_count);
+        printf("Unary bits per bij: %10.5f\n", (double)this->bij_unary / tot_bij_count);
+        printf("Fixed bits per bij: %10.5f\n", (double)this->bij_fixed / tot_bij_count);
+        printf("Total bits per bij: %10.5f\n", (double)(this->bij_unary + this->bij_fixed) / tot_bij_count);
 
         printf("\n");
-        printf("Unary bits per split: %10.5f\n", (double)split_unary / split_count);
-        printf("Fixed bits per split: %10.5f\n", (double)split_fixed / split_count);
-        printf("Total bits per split: %10.5f\n", (double)(split_unary + split_fixed) / split_count);
-        printf("Total bits per key:   %10.5f\n", (double)(bij_unary + bij_fixed + split_unary + split_fixed) / keys_count);
+        printf("Unary bits per split: %10.5f\n", (double)this->split_unary / this->split_count);
+        printf("Fixed bits per split: %10.5f\n", (double)this->split_fixed / this->split_count);
+        printf("Total bits per split: %10.5f\n", (double)(this->split_unary + this->split_fixed) / this->split_count);
+        printf("Total bits per key:   %10.5f\n", (double)(this->bij_unary + this->bij_fixed + this->split_unary + this->split_fixed) / this->keys_count);
 
         printf("\n");
-        printf("Unary bits per bij (Golomb): %10.5f\n", (double)bij_unary_golomb / tot_bij_count);
-        printf("Fixed bits per bij (Golomb): %10.5f\n", (double)bij_fixed_golomb / tot_bij_count);
-        printf("Total bits per bij (Golomb): %10.5f\n", (double)(bij_unary_golomb + bij_fixed_golomb) / tot_bij_count);
+        printf("Unary bits per bij (Golomb): %10.5f\n", (double)this->bij_unary_golomb / tot_bij_count);
+        printf("Fixed bits per bij (Golomb): %10.5f\n", (double)this->bij_fixed_golomb / tot_bij_count);
+        printf("Total bits per bij (Golomb): %10.5f\n", (double)(this->bij_unary_golomb + this->bij_fixed_golomb) / tot_bij_count);
 
         printf("\n");
-        printf("Unary bits per split (Golomb): %10.5f\n", (double)split_unary_golomb / split_count);
-        printf("Fixed bits per split (Golomb): %10.5f\n", (double)split_fixed_golomb / split_count);
-        printf("Total bits per split (Golomb): %10.5f\n", (double)(split_unary_golomb + split_fixed_golomb) / split_count);
-        printf("Total bits per key (Golomb):   %10.5f\n", (double)(bij_unary_golomb + bij_fixed_golomb + split_unary_golomb + split_fixed_golomb) / keys_count);
+        printf("Unary bits per split (Golomb): %10.5f\n", (double)this->split_unary_golomb / this->split_count);
+        printf("Fixed bits per split (Golomb): %10.5f\n", (double)this->split_fixed_golomb / this->split_count);
+        printf("Total bits per split (Golomb): %10.5f\n", (double)(this->split_unary_golomb + this->split_fixed_golomb) / this->split_count);
+        printf("Total bits per key (Golomb):   %10.5f\n", (double)(this->bij_unary_golomb + this->bij_fixed_golomb + this->split_unary_golomb + this->split_fixed_golomb) / this->keys_count);
 
         printf("\n");
 
-        printf("Total split bits        %16.3f\n", (double)split_fixed + split_unary);
+        printf("Total split bits        %16.3f\n", (double)this->split_fixed + this->split_unary);
         printf("Upper bound split bits: %16.3f\n", ub_split_bits);
-        printf("Total bij bits:         %16.3f\n", (double)bij_fixed + bij_unary);
+        printf("Total bij bits:         %16.3f\n", (double)this->bij_fixed + this->bij_unary);
         printf("Upper bound bij bits:   %16.3f\n\n", ub_bij_bits);
 #endif
     }
