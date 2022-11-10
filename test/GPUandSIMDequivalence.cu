@@ -42,7 +42,7 @@ bool test() {
 
 			int num_threads = std::thread::hardware_concurrency();
 			num_threads = num_threads == 0 ? 1 : num_threads;
-			bez::function::GPURecSplit<FROM_LEAF> gpurs(keys, bucket_size);
+			bez::function::GPURecSplit<FROM_LEAF> gpurs(keys, bucket_size, num_threads);
 			bez::function::SIMDRecSplit<FROM_LEAF> simdrs(keys, bucket_size, num_threads);
 			std::cout << "l = " << FROM_LEAF << ", b = " << bucket_size << ", n = " << size << ": ";
 			equivalent &= testEquivalence(gpurs, simdrs, keys);
