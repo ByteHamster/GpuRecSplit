@@ -81,6 +81,7 @@ void construct() {
               << " leafMethod=" << leafMethod
               << " numObjects=" << numObjects
               << " numQueries=" << numQueries
+              << " numThreads=" << numThreads
               << " queryDurationMs=" << queryDurationMs
               << " constructionDurationMs=" << constructionDurationMs
               << " spaceUsage=" << (double) rs.getBits() / numObjects
