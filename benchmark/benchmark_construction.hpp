@@ -15,14 +15,14 @@ template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string architecture = "Simd";
+std::string name = "SIMDRecSplit";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string architecture = "Gpu";
+std::string name = "GPURecSplit";
 #else
 #define SHOCKHASH_ENABLED
 #include <shockhash/ShockHash.h>
@@ -31,7 +31,7 @@ template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
-std::string architecture = "PlainCpu";
+std::string name = "CpuRecSplit";
 #endif
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory");
@@ -75,16 +75,16 @@ void construct() {
     DO_NOT_OPTIMIZE(h);
 
     std::cout << "RESULT"
-              << " architecture=" << architecture
+              << " name=" << name
               << " l=" << leafSize
               << " b=" << bucketSize
               << " leafMethod=" << leafMethod
-              << " numObjects=" << numObjects
+              << " N=" << numObjects
               << " numQueries=" << numQueries
-              << " numThreads=" << numThreads
-              << " queryDurationMs=" << queryDurationMs
-              << " constructionDurationMs=" << constructionDurationMs
-              << " spaceUsage=" << (double) rs.getBits() / numObjects
+              << " threads=" << numThreads
+              << " queryTimeMilliseconds=" << queryDurationMs
+              << " constructionTimeMilliseconds=" << constructionDurationMs
+              << " bitsPerElement=" << (double) rs.getBits() / numObjects
               << std::endl;
 }
 
