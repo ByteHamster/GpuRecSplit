@@ -16,7 +16,7 @@ for threads in $(seq 1 1 8); do
   ./simdrecsplit_construction $params
 
   params="--numQueries 0 --leafMethod rotations --leafSize 16 --bucketSize 2000 --numThreads $threads"
-  [ $threads == 1 ] && ./recsplit_construction $params --numObjects "${threads}M"
-  ./gpurecsplit_construction $params --numObjects "${threads}M"
-  ./simdrecsplit_construction $params --numObjects "${threads}M"
+  [ $threads == 1 ] && ./recsplit_construction $params --numObjects "$((200*threads))k"
+  ./gpurecsplit_construction $params --numObjects "$((200*threads))k"
+  ./simdrecsplit_construction $params --numObjects "$((200*threads))k"
 done
