@@ -92,7 +92,7 @@ class PartitionedSIMDRecSplit {
             return spaceUsage;
         }
 
-        size_t operator()(const hash128_t &hash) {
+        size_t operator()(const hash128_t &hash) const {
             size_t child = ::util::fastrange64(remix(hash.first), numThreads);
             return children[child]->operator()(hash) + childOffsets[child];
         }
