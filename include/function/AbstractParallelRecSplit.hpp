@@ -47,6 +47,7 @@
 #include <string>
 #include <vector>
 #include <immintrin.h>
+#include <ips2ra.hpp>
 
 // Define constexpr namespace ce
 #include <gcem.hpp>
@@ -414,6 +415,25 @@ class AbstractParallelRecSplit {
 				_mm_prefetch((char *)&sorted[bucket_size_acc[hash128_to_bucket(*it)] - 1], _MM_HINT_T0);
 			for (const hash128_t *it = outer_it; it < inner_end; ++it)
 				sorted[--bucket_size_acc[hash128_to_bucket(*it)]] = it->second;
+		}
+	}
+
+	void parallelPartition(const hash128_t *begin, const hash128_t *end, vector<uint64_t> &sorted,
+						   vector<uint64_t> &bucket_size_acc, size_t num_threads) {
+		assert(end - begin == keys_count);
+		assert(sorted.size() >= keys_count);
+		assert(bucket_size_acc.size() == nbuckets + 1);
+
+		ips2ra::parallel::sort(begin, end, [] (hash128_t&& t) { return t.first; }, num_threads);
+
+		size_t i = 0;
+		const hash128_t *it = begin;
+		for (size_t bucket = 0; bucket < nbuckets; bucket++) {
+			bucket_size_acc.at(bucket) = i;
+			while (hash128_to_bucket(*it) == bucket && it != end) {
+				i++;
+				it++;
+			}
 		}
 	}
 

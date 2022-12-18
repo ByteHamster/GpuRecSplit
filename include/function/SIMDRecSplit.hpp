@@ -757,7 +757,11 @@ class SIMDRecSplit
 #ifdef MORESTATS
         auto sorting_start_time = high_resolution_clock::now();
 #endif
-        this->bucketSort(hashes, hashes + this->keys_count, sorted_keys, bucket_size_acc);
+        if (num_threads == 1) {
+            this->bucketSort(hashes, hashes + this->keys_count, sorted_keys, bucket_size_acc);
+        } else {
+            this->parallelPartition(hashes, hashes + this->keys_count, sorted_keys, bucket_size_acc, num_threads);
+        }
 #ifdef MORESTATS
         auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
 #endif

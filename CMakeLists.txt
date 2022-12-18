@@ -12,7 +12,11 @@ target_include_directories(gcem INTERFACE extlib/gcem/include)
 add_library(Sux INTERFACE)
 target_include_directories(Sux SYSTEM INTERFACE extlib/sux)
 
+set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
 add_subdirectory(extlib/simpleRibbon)
+find_package(TBB)
+target_compile_options(ips2ra INTERFACE -D_REENTRANT)
+target_link_libraries(ips2ra INTERFACE pthread)
 
 # ---------------------------- Library Setup ----------------------------
 
@@ -34,7 +38,7 @@ if (CMAKE_CUDA_COMPILER)
 	target_compile_features(GPURecSplit INTERFACE cxx_std_20)
 	target_compile_options(GPURecSplit INTERFACE --expt-relaxed-constexpr)
 	target_compile_options(GPURecSplit INTERFACE -Xcompiler="-march=native")
-	target_link_libraries(GPURecSplit INTERFACE gcem pthread)
+	target_link_libraries(GPURecSplit INTERFACE gcem pthread ips2ra)
 endif()
 
 # SIMDRecSplit
@@ -42,7 +46,7 @@ add_library(SIMDRecSplit INTERFACE)
 target_include_directories(SIMDRecSplit INTERFACE include)
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
-target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread)
+target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread ips2ra)
 target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 # ShockHash
