@@ -16,7 +16,7 @@ set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that do
 add_subdirectory(extlib/simpleRibbon)
 find_package(TBB)
 target_compile_options(ips2ra INTERFACE -D_REENTRANT)
-target_link_libraries(ips2ra INTERFACE pthread)
+target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
 
 # ---------------------------- Library Setup ----------------------------
 

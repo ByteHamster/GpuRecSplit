@@ -382,60 +382,67 @@ class AbstractParallelRecSplit {
 	// Maps a 128-bit to a bucket using the first 64-bit half.
 	inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
 
-	void bucketSort(const hash128_t *begin, const hash128_t *end, vector<uint64_t> &sorted, vector<uint64_t> &bucket_size_acc) {
-		assert(end - begin == keys_count);
+	void parallelPartition(hash128_t *input, vector<uint64_t> &sorted,
+                           vector<uint64_t> &bucket_size_acc, size_t num_threads) {
 		assert(sorted.size() >= keys_count);
 		assert(bucket_size_acc.size() == nbuckets + 1);
 
-		constexpr size_t PREFETCH = 32;
+		ips2ra::parallel::sort(input, input + keys_count, [] (hash128_t t) { return t.first; }, num_threads);
 
-		// count bucket sizes
-		for (const hash128_t *outer_it = begin; outer_it < end; outer_it += PREFETCH) {
-			const hash128_t *inner_end = std::min(end, outer_it + PREFETCH);
-			for (const hash128_t *it = outer_it; it < inner_end; ++it)
-				_mm_prefetch((char *)&bucket_size_acc[hash128_to_bucket(*it)], _MM_HINT_T0);
-			for (const hash128_t *it = outer_it; it < inner_end; ++it)
-				++bucket_size_acc[hash128_to_bucket(*it)];
-		}
-		bucket_size_acc[nbuckets] = keys_count;
+        // For most reasonable input sizes, doing this sequentially is faster
+#ifndef PARALLEL_PARTITION_PREFIX
+        size_t i = 0;
+        const hash128_t *it = input;
+        const hash128_t *end = input + keys_count;
+        for (size_t bucket = 0; bucket < nbuckets; bucket++) {
+            bucket_size_acc.at(bucket) = i;
+            while (hash128_to_bucket(*it) == bucket && it != end) {
+                sorted[i] = it->second;
+                i++;
+                it++;
+            }
+        }
+        bucket_size_acc[nbuckets] = keys_count;
+#else
+        const size_t keysPerThread = keys_count / num_threads + 1;
+        std::vector<std::thread> threads;
+        for (size_t t = 0; t < num_threads; t++) {
+            threads.emplace_back([&, t] {
+                size_t begin = std::min(keysPerThread * t, keys_count);
+                size_t end = std::min(keysPerThread * (t + 1), keys_count);
 
-		// prefix sum
-		uint64_t sum = bucket_size_acc[0];
-		for (size_t i = 1; i < nbuckets; ++i) {
-			sum += bucket_size_acc[i];
-			bucket_size_acc[i] = sum;
-		}
+                // Align begin and end to next bucket borders
+                while (hash128_to_bucket(input[end]) == hash128_to_bucket(input[end + 1]) && end < keys_count) {
+                    end++;
+                }
+                if (t != 0) {
+                    while (hash128_to_bucket(input[begin - 1]) == hash128_to_bucket(input[begin]) && begin < end) {
+                        begin++;
+                    }
+                }
+                size_t firstBucket = (t == 0) ? 0 : hash128_to_bucket(input[begin]);
+                size_t lastBucket = (t == num_threads - 1) ? nbuckets : hash128_to_bucket(input[end]);
 
-		// place elements in buckets
-		for (const hash128_t *outer_it = begin; outer_it < end; outer_it += PREFETCH) {
-			const hash128_t *inner_end = std::min(end, outer_it + PREFETCH);
-			for (const hash128_t *it = outer_it; it < inner_end; ++it)
-				_mm_prefetch((char *)&bucket_size_acc[hash128_to_bucket(*it)], _MM_HINT_T0);
-			for (const hash128_t *it = outer_it; it < inner_end; ++it)
-				_mm_prefetch((char *)&sorted[bucket_size_acc[hash128_to_bucket(*it)] - 1], _MM_HINT_T0);
-			for (const hash128_t *it = outer_it; it < inner_end; ++it)
-				sorted[--bucket_size_acc[hash128_to_bucket(*it)]] = it->second;
-		}
-	}
-
-	void parallelPartition(const hash128_t *begin, const hash128_t *end, vector<uint64_t> &sorted,
-						   vector<uint64_t> &bucket_size_acc, size_t num_threads) {
-		assert(end - begin == keys_count);
-		assert(sorted.size() >= keys_count);
-		assert(bucket_size_acc.size() == nbuckets + 1);
-
-		ips2ra::parallel::sort(begin, end, [] (hash128_t&& t) { return t.first; }, num_threads);
-
-		size_t i = 0;
-		const hash128_t *it = begin;
-		for (size_t bucket = 0; bucket < nbuckets; bucket++) {
-			bucket_size_acc.at(bucket) = i;
-			while (hash128_to_bucket(*it) == bucket && it != end) {
-				i++;
-				it++;
-			}
-		}
-	}
+                size_t previousBucket = firstBucket - 1;
+                for (size_t i = begin; i < end; i++) {
+                    sorted[i] = input[i].second;
+                    size_t bucket = hash128_to_bucket(input[i]);
+                    while (previousBucket != bucket) {
+                        previousBucket++;
+                        bucket_size_acc[previousBucket] = i;
+                    }
+                }
+                while (previousBucket < lastBucket) {
+                    previousBucket++;
+                    bucket_size_acc[previousBucket] = keys_count;
+                }
+            });
+        }
+        for (size_t t = 0; t < num_threads; t++) {
+            threads.at(t).join();
+        }
+#endif
+    }
 
   public:
 	// TODO: why isn't this const?

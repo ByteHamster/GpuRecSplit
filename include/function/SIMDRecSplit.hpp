@@ -757,11 +757,7 @@ class SIMDRecSplit
 #ifdef MORESTATS
         auto sorting_start_time = high_resolution_clock::now();
 #endif
-        if (num_threads == 1) {
-            this->bucketSort(hashes, hashes + this->keys_count, sorted_keys, bucket_size_acc);
-        } else {
-            this->parallelPartition(hashes, hashes + this->keys_count, sorted_keys, bucket_size_acc, num_threads);
-        }
+        this->parallelPartition(hashes, sorted_keys, bucket_size_acc, num_threads);
 #ifdef MORESTATS
         auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
 #endif
@@ -813,7 +809,7 @@ class SIMDRecSplit
 
         printf("\n");
         printf("Total time: %13.3f ms\n", duration_cast<nanoseconds>(high_resolution_clock::now() - total_start_time).count() * 1E-6);
-        printf("Sorting time: %13.3f ms\n", sorting_time * 1E-6);
+        printf("Sorting time: %11.3f ms\n", sorting_time * 1E-6);
         printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
         for (int i = 0; i < MAX_LEVEL_TIME; i++) {
             if (time_split[i] > 0) {
