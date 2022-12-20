@@ -113,9 +113,9 @@ int constructAll(int argc, const char* const* argv) {
     }
 
     if (leafMethod == "bruteforce") {
-        dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+        dispatchLeafSize<RecSplit, bez::function::hash128_t, 10>(leafSize);
     } else if (leafMethod == "rotations") {
-        dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+        //dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     }
 #ifdef SHOCKHASH_ENABLED
     else if (leafMethod == "cuckoo") {

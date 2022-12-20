@@ -18,6 +18,12 @@ find_package(TBB)
 target_compile_options(ips2ra INTERFACE -D_REENTRANT)
 target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
 
+add_library(Ips2raRecSplitSorter SHARED src/Sorter.cpp)
+target_compile_features(Ips2raRecSplitSorter PRIVATE cxx_std_20)
+target_include_directories(Ips2raRecSplitSorter PRIVATE include)
+target_link_libraries(Ips2raRecSplitSorter PUBLIC ips2ra tlx)
+target_compile_options(Ips2raRecSplitSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+
 # ---------------------------- Library Setup ----------------------------
 
 # Standard RecSplit
@@ -38,7 +44,7 @@ if (CMAKE_CUDA_COMPILER)
 	target_compile_features(GPURecSplit INTERFACE cxx_std_20)
 	target_compile_options(GPURecSplit INTERFACE --expt-relaxed-constexpr)
 	target_compile_options(GPURecSplit INTERFACE -Xcompiler="-march=native")
-	target_link_libraries(GPURecSplit INTERFACE gcem pthread ips2ra)
+	target_link_libraries(GPURecSplit INTERFACE gcem pthread Ips2raRecSplitSorter)
 endif()
 
 # SIMDRecSplit
@@ -46,7 +52,7 @@ add_library(SIMDRecSplit INTERFACE)
 target_include_directories(SIMDRecSplit INTERFACE include)
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
-target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread ips2ra)
+target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread Ips2raRecSplitSorter)
 target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 # ShockHash

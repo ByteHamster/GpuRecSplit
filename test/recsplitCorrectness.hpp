@@ -5,11 +5,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <iostream>
-
-namespace bez::function {
-	struct __hash128_t;
-	typedef struct __hash128_t hash128_t;
-}
+#include <util/Hash128.h>
 
 template<class RS>
 bool testCorrectness(RS &rs, const std::vector<bez::function::hash128_t> &keys) {

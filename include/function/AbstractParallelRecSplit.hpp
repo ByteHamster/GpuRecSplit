@@ -36,7 +36,6 @@
 
 #pragma once
 
-#include "../support/SpookyV2.hpp"
 #include "../util/Vector.hpp"
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
@@ -47,7 +46,8 @@
 #include <string>
 #include <vector>
 #include <immintrin.h>
-#include <ips2ra.hpp>
+#include <util/Sorter.hpp>
+#include <util/Hash128.h>
 
 // Define constexpr namespace ce
 #include <gcem.hpp>
@@ -97,36 +97,6 @@ static constexpr uint64_t start_seed[] = {0x106393c187cae21a, 0x6453cec3f7376937
 									      0x082f20e10092a9a3, 0x2ada2ce68d21defc, 0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
 									      0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815, 0xcd4216006c74052a};
 static constexpr int NUM_START_SEEDS = sizeof(start_seed) / sizeof(uint64_t);
-
-/** 128-bit hashes.
- *
- * In the construction of GPURecSplit, keys are replaced with instances
- * of this class using SpookyHash, first thing.
- * Moreover, it is possible to build and query GPURecSplit instances using 128-bit
- * random hashes only (mainly for benchmarking purposes).
- */
-
-typedef struct __hash128_t {
-	uint64_t first, second;
-	bool operator<(const __hash128_t &o) const { return first < o.first || second < o.second; }
-	__hash128_t(const uint64_t first, const uint64_t second) {
-		this->first = first;
-		this->second = second;
-	}
-} hash128_t;
-
-/** Convenience function hashing a key a returning a __hash128_t
- *
- * @param data a pointer to the key.
- * @param length the length in bytes of the key.
- * @param seed an additional seed.
- */
-
-hash128_t inline spooky(const void *data, const size_t length, const uint64_t seed) {
-	uint64_t h0 = seed, h1 = seed;
-	SpookyHash::Hash128(data, length, &h0, &h1);
-	return {h1, h0};
-}
 
 // Quick replacements for min/max on not-so-large integers.
 
@@ -387,7 +357,7 @@ class AbstractParallelRecSplit {
 		assert(sorted.size() >= keys_count);
 		assert(bucket_size_acc.size() == nbuckets + 1);
 
-		ips2ra::parallel::sort(input, input + keys_count, [] (hash128_t t) { return t.first; }, num_threads);
+        sorter::sortParallel_hash128_t(input, keys_count, num_threads);
 
         // For most reasonable input sizes, doing this sequentially is faster
 #ifndef PARALLEL_PARTITION_PREFIX

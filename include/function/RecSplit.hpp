@@ -33,7 +33,6 @@
 
 #pragma once
 
-#include "../support/SpookyV2.hpp"
 #include "../util/Vector.hpp"
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
@@ -46,6 +45,7 @@
 #include <vector>
 #include <fstream>
 #include <limits>
+#include <util/Hash128.h>
 
 // Define constexpr namespace ce
 #ifdef _MSC_VER
@@ -109,36 +109,6 @@ uint64_t inline remix(uint64_t z) {
 	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
 	z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
 	return z ^ (z >> 31);
-}
-
-/** 128-bit hashes.
- *
- * In the construction of RecSplit, keys are replaced with instances
- * of this class using SpookyHash, first thing.
- * Moreover, it is possible to build and query RecSplit instances using 128-bit
- * random hashes only (mainly for benchmarking purposes).
- */
-
-typedef struct __hash128_t {
-	uint64_t first, second;
-	bool operator<(const __hash128_t &o) const { return first < o.first || second < o.second; }
-	__hash128_t(const uint64_t first, const uint64_t second) {
-		this->first = first;
-		this->second = second;
-	}
-} hash128_t;
-
-/** Convenience function hashing a key a returning a __hash128_t
- *
- * @param data a pointer to the key.
- * @param length the length in bytes of the key.
- * @param seed an additional seed.
- */
-
-hash128_t inline spooky(const void *data, const size_t length, const uint64_t seed) {
-	uint64_t h0 = seed, h1 = seed;
-	SpookyHash::Hash128(data, length, &h0, &h1);
-	return {h1, h0};
 }
 
 // Quick replacements for min/max on not-so-large integers.
