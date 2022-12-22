@@ -6943,7 +6943,7 @@ static constexpr std::array<std::array<uint32_t, 3000>, 23> golomb_rice_memo{{
   * Returns the precomputed golomb rice codes as computed by fill_golomb_rice in RecSplit.hpp.
   */
 static constexpr std::array<uint32_t, 3000> get_golomb_rice_memo(int leaf_size) {
-	return golomb_rice_memo[leaf_size - 2];
+    return golomb_rice_memo[leaf_size - 2];
 }
 
 } // namespace sux::function
