@@ -425,10 +425,29 @@ class GPURecSplit
 		this->bucket_size = bucket_size;
 		this->keys_count = keys.size();
 		hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
-		for (size_t i = 0; i < this->keys_count; ++i) {
-			h[i] = first_hash(keys[i].c_str(), keys[i].size());
-		}
-		hash_gen(h);
+
+        if (numThreads == 1) {
+            for (size_t i = 0; i < this->keys_count; ++i) {
+                h[i] = first_hash(keys[i].c_str(), keys[i].size());
+            }
+        } else {
+            size_t keysPerThread = this->keys_count / numThreads + 1;
+            std::vector<std::thread> threads;
+            for (size_t thread = 0; thread < numThreads; thread++) {
+                threads.emplace_back([&, thread] {
+                    size_t from = thread * keysPerThread;
+                    size_t to = std::min(this->keys_count, (thread + 1) * keysPerThread);
+                    for (size_t i = from; i < to; ++i) {
+                        h[i] = first_hash(keys[i].c_str(), keys[i].size());
+                    }
+                });
+            }
+            for (std::thread &t : threads) {
+                t.join();
+            }
+        }
+
+        hash_gen(h);
 		free(h);
 	}
 
