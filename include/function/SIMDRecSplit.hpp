@@ -700,7 +700,10 @@ class SIMDRecSplit
         vector<uint32_t> unary;
         vector<uint64_t> temp(MAX_BUCKET_SIZE);
         size_t begin = tid * this->nbuckets / num_threads;
-        size_t end = (tid + 1) * this->nbuckets / num_threads;
+        size_t end = std::min(this->nbuckets, (tid + 1) * this->nbuckets / num_threads);
+        if (tid == num_threads - 1) {
+            end = this->nbuckets;
+        }
         for (size_t i = begin; i < end; ++i) {
             const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
             if (s > 1) {

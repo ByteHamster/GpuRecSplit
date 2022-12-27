@@ -676,7 +676,10 @@ class GPURecSplit
                 vector<array<uint32_t, 3>> result_counts(numStreamsPerThread);
                 cudaStream_t streams[numStreamsPerThread];
                 size_t begin = tid * this->nbuckets / numThreads;
-                size_t end = (tid + 1) * this->nbuckets / numThreads;
+                size_t end = std::min(this->nbuckets, (tid + 1) * this->nbuckets / numThreads);
+                if (tid == numThreads - 1) {
+                    end = this->nbuckets;
+                }
                 size_t i;
                 for (i = begin; i < end; i++) {
                     const size_t current_stream_id = i % numStreamsPerThread;
