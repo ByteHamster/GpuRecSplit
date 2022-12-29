@@ -415,6 +415,7 @@ class GPURecSplit
     static constexpr int UPPER_AGGR_BLOCK_SIZE = 256;
     static constexpr int LOWER_AGGR_BLOCK_SIZE = 256;
     static constexpr int LEAF_BLOCK_SIZE = 512;
+    static constexpr size_t CUDA_MAX_GRID = 65535;
 
     const size_t numThreads = 8;
     uint64_t *device_keys;
@@ -712,9 +713,13 @@ class GPURecSplit
                 continue;
             }
             auto &buckets = bucketsBySize.at(bucketSize);
-            checkCudaError(cudaMemcpyAsync(bucketIdxes, buckets.data(), buckets.size() * sizeof(size_t), cudaMemcpyHostToDevice));
-            result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes,
-                             buckets.size(), streams[bucketSize % NUM_STREAMS], maxResultsSize);
+            size_t numBuckets = buckets.size();
+            for (size_t from = 0; from < numBuckets; from += CUDA_MAX_GRID) {
+                size_t batchSize = std::min(numBuckets - from, CUDA_MAX_GRID);
+                checkCudaError(cudaMemcpyAsync(bucketIdxes, buckets.data() + from, batchSize * sizeof(size_t), cudaMemcpyHostToDevice));
+                result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes,
+                                     batchSize, streams[bucketSize % NUM_STREAMS], maxResultsSize);
+            }
         }
         checkCudaError(cudaDeviceSynchronize());
         checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
