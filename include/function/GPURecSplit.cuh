@@ -417,7 +417,6 @@ class GPURecSplit
     static constexpr int LEAF_BLOCK_SIZE = 512;
 
     const size_t numThreads = 8;
-    const size_t numStreamsPerThread = NUM_STREAMS / numThreads;
     uint64_t *device_keys;
     uint64_t *device_bucket_size_acc;
     uint32_t *device_results;
@@ -434,7 +433,7 @@ class GPURecSplit
      * functions.
      */
     GPURecSplit(const vector<string> &keys, const size_t bucket_size, const int numThreads)
-            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
+            : numThreads(numThreads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
@@ -475,7 +474,7 @@ class GPURecSplit
      * functions.
      */
     GPURecSplit(vector<hash128_t> &keys, const size_t bucket_size, const int numThreads)
-            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
+            : numThreads(numThreads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash_gen(&keys[0]);
@@ -489,7 +488,7 @@ class GPURecSplit
      * @param bucket_size the desired bucket size.
      */
     GPURecSplit(ifstream& input, const size_t bucket_size, const int numThreads)
-            : numThreads(numThreads), numStreamsPerThread(NUM_STREAMS / numThreads) {
+            : numThreads(numThreads) {
         this->bucket_size = bucket_size;
         vector<hash128_t> h;
         for(string key; getline(input, key);) h.push_back(first_hash(key.c_str(), key.size()));
@@ -701,6 +700,12 @@ class GPURecSplit
         threads.reserve(numThreads);
         bucket_pos_acc[0] = 0;
 
+        std::vector<cudaStream_t> streams;
+        streams.resize(NUM_STREAMS);
+        for (cudaStream_t &stream : streams) {
+            checkCudaError(cudaStreamCreate(&stream));
+        }
+
         vector<array<uint32_t, 3>> result_counts(MAX_BUCKET_SIZE);
         for (size_t bucketSize = 2; bucketSize < MAX_BUCKET_SIZE; bucketSize++) {
             if (bucketsBySize.at(bucketSize).empty()) {
@@ -708,9 +713,10 @@ class GPURecSplit
             }
             auto &buckets = bucketsBySize.at(bucketSize);
             checkCudaError(cudaMemcpyAsync(bucketIdxes, buckets.data(), buckets.size() * sizeof(size_t), cudaMemcpyHostToDevice));
-            result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes, buckets.size(), 0, maxResultsSize);
+            result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes,
+                             buckets.size(), streams[bucketSize % NUM_STREAMS], maxResultsSize);
         }
-        checkCudaError(cudaStreamSynchronize(0));
+        checkCudaError(cudaDeviceSynchronize());
         checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
 
         vector<uint32_t> unary;
