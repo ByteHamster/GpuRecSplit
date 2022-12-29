@@ -130,7 +130,7 @@ int constructAll(int argc, const char* const* argv) {
 #endif
 
     if (leafMethod == "bruteforce") {
-        dispatchLeafSize<RecSplit, bez::function::hash128_t, 10>(leafSize);
+        dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     } else if (leafMethod == "rotations") {
         dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     }
