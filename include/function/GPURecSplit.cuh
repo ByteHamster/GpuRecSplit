@@ -97,8 +97,9 @@ static constexpr int SYNC_THRESHOLD = 14;
 /**
   * Computes one splitting of the higher levels with fanout 2 using a single thread block.
   */
-__global__ void higherLevelKernel(uint64_t *__restrict__ bucket, uint64_t *__restrict__ result,
-        const uint32_t size, const uint32_t split, const uint64_t seed) {
+__global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *__restrict__ bucket_size_acc,
+                                  size_t bucketIdx, size_t offsetInBucket, uint64_t *__restrict__ result,
+                                  const uint32_t size, const uint32_t split, const uint64_t seed) {
     __builtin_assume(size < MAX_BUCKET_SIZE);
     __builtin_assume(split < size);
     __builtin_assume(split >= 8); // since upper_aggr >= 8
@@ -108,6 +109,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ bucket, uint64_t *__res
     __shared__ uint32_t writeback_pos[2];
 
     auto block = cg::this_thread_block();
+    uint64_t *__restrict__ bucket = device_keys + bucket_size_acc[bucketIdx] + offsetInBucket;
     cooperative_groups::memcpy_async(block, s_bucket, bucket, size * sizeof(uint64_t));
     if (threadIdx.x == 0) {
         s_result = INVALID_RESULT;
@@ -151,8 +153,9 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ bucket, uint64_t *__res
   * \tparam _MAX_FANOUT An upper limit for the given fanout
   */
 template<int _MAX_FANOUT, int BLOCK_SIZE, uint32_t SPLIT, uint64_t SEED>
-__global__ void aggrKernel(uint64_t *__restrict__ g_bucket, uint64_t *__restrict__ result,
-        const uint32_t size, const uint32_t fanout) {
+__global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__ bucket_size_acc,
+                           uint64_t bucketIdx, uint64_t offsetInBucket, uint64_t *__restrict__ result,
+                           const uint32_t size, const uint32_t fanout) {
     static_assert(_MAX_FANOUT <= 9, "aggrKernel only works for _MAX_FANOUT <= 9!");
     __builtin_assume(fanout > 1);
     __builtin_assume(fanout <= _MAX_FANOUT);
@@ -170,7 +173,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_bucket, uint64_t *__restrict
     __shared__ uint32_t writeback_pos[_MAX_FANOUT];
 
     auto block = cg::this_thread_block();
-    uint64_t *__restrict__ bucket = g_bucket + blockIdx.x * size;
+    uint64_t *__restrict__ bucket = g_keys + bucket_size_acc[bucketIdx] + offsetInBucket + blockIdx.x * size;
     cooperative_groups::memcpy_async(block, s_bucket, bucket, size * sizeof(uint64_t));
     if (threadIdx.x < fanout) {
         if (threadIdx.x == 0)
@@ -256,7 +259,8 @@ static constexpr uint32_t rotate(uint32_t val, uint32_t x) {
 }
 
 template<uint32_t MAX_SIZE, bool USE_ROTATE>
-__global__ void leafKernel(const uint64_t *__restrict__ g_bucket, uint64_t *__restrict__ result, const uint32_t size,
+__global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *__restrict__ bucket_size_acc,
+                           size_t bucketIdx, size_t offsetInBucket, uint64_t *__restrict__ result, const uint32_t size,
         const int sync_frequency) {
     assert(!USE_ROTATE || size == MAX_SIZE);
     __builtin_assume(!USE_ROTATE || size == MAX_SIZE);
@@ -274,7 +278,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_bucket, uint64_t *__re
     [[maybe_unused]] __shared__ uint64_t s_bucket_right[USE_ROTATE ? MAX_SIZE : 1];
 
     auto block = cg::this_thread_block();
-    const uint64_t *__restrict__ bucket = g_bucket + blockIdx.x * size;
+    const uint64_t *__restrict__ bucket = g_keys + bucket_size_acc[bucketIdx] + offsetInBucket + blockIdx.x * size;
     cooperative_groups::memcpy_async(block, s_bucket, bucket, size * sizeof(uint64_t));
     if (threadIdx.x == 0) {
         s_result = INVALID_RESULT;
@@ -408,6 +412,8 @@ class GPURecSplit
 
     const size_t numThreads = 8;
     const size_t numStreamsPerThread = NUM_STREAMS / numThreads;
+    uint64_t *device_keys;
+    uint64_t *device_bucket_size_acc;
   public:
     GPURecSplit() {}
 
@@ -485,11 +491,10 @@ class GPURecSplit
     }
 
   private:
-    array<uint32_t, 3> executeBucketKernels(uint32_t size, uint64_t *host_bucket, uint64_t *device_bucket,
+    array<uint32_t, 3> executeBucketKernels(uint32_t size, size_t bucketIdx,
                               uint64_t *host_result, uint64_t *device_result, cudaStream_t stream) {
-        checkCudaError(cudaMemcpyAsync(device_bucket, host_bucket, size * sizeof(uint64_t), cudaMemcpyHostToDevice, stream));
 
-        uint32_t num_results = executeHigherLevels(size, device_bucket, device_result, stream);
+        uint32_t num_results = executeHigherLevels(size, bucketIdx, 0, device_result, stream);
         array<uint32_t, 3> result_counts;
         result_counts[0] = num_results;
 
@@ -498,14 +503,15 @@ class GPURecSplit
             const int num_blocks = size / upper_aggr;
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
                 <<<num_blocks, UPPER_AGGR_BLOCK_SIZE, upper_aggr * sizeof(uint64_t), stream>>>(
-                device_bucket, device_result + num_results, upper_aggr, upper_fanout);
+                device_keys, device_bucket_size_acc, bucketIdx, 0, device_result + num_results, upper_aggr, upper_fanout);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
         uint32_t remaining = size % upper_aggr;
         if (remaining > lower_aggr) {
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
-                <<<1, UPPER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_bucket + size - remaining,
+                <<<1, UPPER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc,
+                 bucketIdx, size - remaining,
                 device_result + num_results, remaining, uint16_t(remaining + lower_aggr - 1) / lower_aggr);
             checkCudaError(cudaGetLastError());
             num_results += 1;
@@ -517,15 +523,16 @@ class GPURecSplit
             const int num_blocks = size / lower_aggr;
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
                 <<<num_blocks, LOWER_AGGR_BLOCK_SIZE, lower_aggr * sizeof(uint64_t), stream>>>(
-                device_bucket, device_result + num_results, lower_aggr, lower_fanout);
+                device_keys, device_bucket_size_acc, bucketIdx, 0, device_result + num_results, lower_aggr, lower_fanout);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
         remaining = size % lower_aggr;
         if (remaining > LEAF_SIZE) {
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
-                <<<1, LOWER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_bucket + size - remaining,
-                device_result + num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE);
+                <<<1, LOWER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys,
+                     device_bucket_size_acc, bucketIdx, size - remaining,
+                     device_result + num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
@@ -537,7 +544,8 @@ class GPURecSplit
             constexpr uint32_t sync_frequency = (1U << golomb_param(LEAF_SIZE)) / LEAF_BLOCK_SIZE / SYNC_CONST;
             // for __builtin_assume in leafKernel
             static_assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0, "sync_frequency must be 0 for LEAF_SIZE < SYNC_THRESHOLD!");
-            leafKernel<LEAF_SIZE, use_bijections_rotate><<<num_blocks, LEAF_BLOCK_SIZE, 0, stream>>>(device_bucket,
+            leafKernel<LEAF_SIZE, use_bijections_rotate><<<num_blocks, LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc,
+                 bucketIdx, 0,
                 device_result + num_results, LEAF_SIZE, sync_frequency);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
@@ -546,7 +554,7 @@ class GPURecSplit
         if (remaining > 1) {
             const uint32_t sync_frequency = (1U << golomb_param(remaining)) / LEAF_BLOCK_SIZE / SYNC_CONST;
             assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0); // for __builtin_assume in leafKernel
-            leafKernel<LEAF_SIZE, false><<<1, LEAF_BLOCK_SIZE, 0, stream>>>(device_bucket + size - remaining,
+            leafKernel<LEAF_SIZE, false><<<1, LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc, bucketIdx, size - remaining,
                 device_result + num_results, remaining, sync_frequency);
             checkCudaError(cudaGetLastError());
             num_results += 1;
@@ -557,14 +565,14 @@ class GPURecSplit
         return result_counts;
     }
 
-    uint32_t executeHigherLevels(size_t size, uint64_t *bucket, uint64_t *result, cudaStream_t stream, const int level = 0) {
+    uint32_t executeHigherLevels(size_t size, size_t bucketIdx, size_t offsetInBucket, uint64_t *result, cudaStream_t stream, const int level = 0) {
         if (size > upper_aggr) {
             const uint32_t split = get_split(size, upper_aggr);
-            higherLevelKernel<<<1, HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(bucket,
-                result, size, split, start_seed[level]);
+            higherLevelKernel<<<1, HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc,
+                bucketIdx, offsetInBucket, result, size, split, start_seed[level]);
             checkCudaError(cudaGetLastError());
-            uint32_t skip_results = 1 + executeHigherLevels(split, bucket, result + 1, stream, level + 1);
-            skip_results += executeHigherLevels(size - split, bucket + split, result + skip_results, stream, level + 1);
+            uint32_t skip_results = 1 + executeHigherLevels(split, bucketIdx, offsetInBucket, result + 1, stream, level + 1);
+            skip_results += executeHigherLevels(size - split, bucketIdx, offsetInBucket + split, result + skip_results, stream, level + 1);
             return skip_results;
         }
         return 0;
@@ -654,13 +662,15 @@ class GPURecSplit
         typename RiceBitVector<AT>::Builder builder;
 
         const size_t bucket_bytes = NUM_STREAMS * MAX_BUCKET_SIZE * sizeof(uint64_t);
-        uint64_t *host_buckets;
-        checkCudaError(cudaHostAlloc(&host_buckets, bucket_bytes, cudaHostAllocWriteCombined));
         uint64_t *host_results;
         checkCudaError(cudaMallocHost(&host_results, bucket_bytes));
-        uint64_t *device_buckets;
-        checkCudaError(cudaMalloc(&device_buckets, 2 * bucket_bytes));
-        uint64_t *device_results = device_buckets + NUM_STREAMS * MAX_BUCKET_SIZE;
+        uint64_t *device_results;
+        checkCudaError(cudaMalloc(&device_results, bucket_bytes));
+
+        checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
+        checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
+        checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
+        checkCudaError(cudaMemcpy(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice));
 
         vector<thread> threads;
         threads.reserve(numThreads);
@@ -684,7 +694,6 @@ class GPURecSplit
                 for (i = begin; i < end; i++) {
                     const size_t current_stream_id = i % numStreamsPerThread;
                     const int bucket_offset = (tid * numStreamsPerThread + current_stream_id) * MAX_BUCKET_SIZE;
-                    uint64_t *bucket = host_buckets + bucket_offset;
                     cudaStream_t &current_stream = streams[current_stream_id];
 
                     if (i - begin < numStreamsPerThread) {
@@ -702,8 +711,7 @@ class GPURecSplit
 
                     uint32_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
                     if (s > 1) {
-                        memcpy(bucket, &sorted_keys.data()[bucket_size_acc[i]], s * sizeof(uint64_t));
-                        result_counts[current_stream_id] = executeBucketKernels(s, bucket, device_buckets + bucket_offset,
+                        result_counts[current_stream_id] = executeBucketKernels(s, i,
                             host_results + bucket_offset, device_results + bucket_offset, current_stream);
                     }
 #ifdef MORESTATS
