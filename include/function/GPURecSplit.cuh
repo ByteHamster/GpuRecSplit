@@ -63,6 +63,8 @@ namespace cg = cooperative_groups;
 
 namespace bez::function {
 
+static constexpr int MAX_RESULTS_SIZE = 3000;
+
 using namespace std;
 using namespace std::chrono;
 
@@ -98,7 +100,7 @@ static constexpr int SYNC_THRESHOLD = 14;
   * Computes one splitting of the higher levels with fanout 2 using a single thread block.
   */
 __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *__restrict__ bucket_size_acc,
-                                  uint64_t *__restrict__ results,
+                                  uint32_t *__restrict__ results,
                                   size_t *__restrict__ bucketIdxes, size_t offsetInBucket, size_t offsetInResults,
                                   const uint32_t size, const uint32_t split, const uint64_t seed) {
     __builtin_assume(size < MAX_BUCKET_SIZE);
@@ -138,7 +140,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults] = s_result;
+        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -156,7 +158,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
   */
 template<int _MAX_FANOUT, int BLOCK_SIZE, uint32_t SPLIT, uint64_t SEED>
 __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__ bucket_size_acc,
-                           uint64_t *__restrict__ results,
+                           uint32_t *__restrict__ results,
                            size_t *bucketIdxes, uint64_t offsetInBucket, uint64_t offsetInResults,
                            const uint32_t size, const uint32_t fanout) {
     static_assert(_MAX_FANOUT <= 9, "aggrKernel only works for _MAX_FANOUT <= 9!");
@@ -246,7 +248,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults + blockIdx.x] = s_result;
+        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults + blockIdx.x] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -264,7 +266,7 @@ static constexpr uint32_t rotate(uint32_t val, uint32_t x) {
 
 template<uint32_t MAX_SIZE, bool USE_ROTATE>
 __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *__restrict__ bucket_size_acc,
-                           uint64_t *__restrict__ results,
+                           uint32_t *__restrict__ results,
                            size_t *bucketIdxes, size_t offsetInBucket, size_t offsetInResults, const uint32_t size,
                            const int sync_frequency) {
     assert(!USE_ROTATE || size == MAX_SIZE);
@@ -385,7 +387,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults + blockIdx.x] = s_result;
+        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults + blockIdx.x] = s_result;
 }
 
 /**
@@ -420,7 +422,7 @@ class GPURecSplit
     const size_t numStreamsPerThread = NUM_STREAMS / numThreads;
     uint64_t *device_keys;
     uint64_t *device_bucket_size_acc;
-    uint64_t *device_results;
+    uint32_t *device_results;
   public:
     GPURecSplit() {}
 
@@ -565,7 +567,7 @@ class GPURecSplit
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
-        assert(num_results < MAX_BUCKET_SIZE);
+        assert(num_results < MAX_RESULTS_SIZE);
         return result_counts;
     }
 
@@ -583,13 +585,13 @@ class GPURecSplit
         return 0;
     }
 
-    void unpackResults(const size_t size, uint64_t *result, typename RiceBitVector<AT>::Builder &builder,
+    void unpackResults(const size_t size, uint32_t *result, typename RiceBitVector<AT>::Builder &builder,
         vector<uint32_t> &unary, array<uint32_t, 3> &result_counts) {
         int higher_level_pos = 0;
         unpackResults(size, result, builder, unary, result_counts, higher_level_pos);
     }
 
-    void unpackResults(const size_t size, uint64_t *result, typename RiceBitVector<AT>::Builder &builder,
+    void unpackResults(const size_t size, uint32_t *result, typename RiceBitVector<AT>::Builder &builder,
                        vector<uint32_t> &unary, array<uint32_t, 3>& result_counts, int &higher_level_pos) {
         const auto log2golomb = golomb_param(size);
         if (size > upper_aggr) {
@@ -684,14 +686,13 @@ class GPURecSplit
 
         typename RiceBitVector<AT>::Builder builder;
 
-        const size_t results_size = this->nbuckets * MAX_BUCKET_SIZE * sizeof(uint64_t);
-        uint64_t *host_results;
+        const size_t results_size = this->nbuckets * MAX_RESULTS_SIZE * sizeof(uint32_t);
+        uint32_t *host_results = static_cast<uint32_t *>(malloc(results_size));
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_results, results_size));
-        host_results = static_cast<uint64_t *>(malloc(results_size));
         size_t *bucketIdxes;
         checkCudaError(cudaMalloc(&bucketIdxes, this->nbuckets * sizeof(size_t)));
 
@@ -715,7 +716,7 @@ class GPURecSplit
         for (size_t i = 0; i < this->nbuckets; i++) {
             size_t bucketSize = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
             auto result_counts_copy = result_counts[bucketSize];
-            unpackResults(bucketSize, host_results + i * MAX_BUCKET_SIZE, builder, unary, result_counts_copy);
+            unpackResults(bucketSize, host_results + i * MAX_RESULTS_SIZE, builder, unary, result_counts_copy);
             builder.appendUnaryAll(unary);
             unary.clear();
             bucket_pos_acc[i + 1] = builder.getBits();
