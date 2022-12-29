@@ -63,8 +63,6 @@ namespace cg = cooperative_groups;
 
 namespace bez::function {
 
-static constexpr int MAX_RESULTS_SIZE = 3000;
-
 using namespace std;
 using namespace std::chrono;
 
@@ -102,7 +100,7 @@ static constexpr int SYNC_THRESHOLD = 14;
 __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *__restrict__ bucket_size_acc,
                                   uint32_t *__restrict__ results,
                                   size_t *__restrict__ bucketIdxes, size_t offsetInBucket, size_t offsetInResults,
-                                  const uint32_t size, const uint32_t split, const uint64_t seed) {
+                                  const uint32_t size, const uint32_t split, const uint64_t seed, size_t maxResultsSize) {
     __builtin_assume(size < MAX_BUCKET_SIZE);
     __builtin_assume(split < size);
     __builtin_assume(split >= 8); // since upper_aggr >= 8
@@ -140,7 +138,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults] = s_result;
+        results[bucketIdx * maxResultsSize + offsetInResults] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -160,7 +158,7 @@ template<int _MAX_FANOUT, int BLOCK_SIZE, uint32_t SPLIT, uint64_t SEED>
 __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__ bucket_size_acc,
                            uint32_t *__restrict__ results,
                            size_t *bucketIdxes, uint64_t offsetInBucket, uint64_t offsetInResults,
-                           const uint32_t size, const uint32_t fanout) {
+                           const uint32_t size, const uint32_t fanout, size_t maxResultsSize) {
     static_assert(_MAX_FANOUT <= 9, "aggrKernel only works for _MAX_FANOUT <= 9!");
     __builtin_assume(fanout > 1);
     __builtin_assume(fanout <= _MAX_FANOUT);
@@ -248,7 +246,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults + blockIdx.x] = s_result;
+        results[bucketIdx * maxResultsSize + offsetInResults + blockIdx.x] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -268,7 +266,7 @@ template<uint32_t MAX_SIZE, bool USE_ROTATE>
 __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *__restrict__ bucket_size_acc,
                            uint32_t *__restrict__ results,
                            size_t *bucketIdxes, size_t offsetInBucket, size_t offsetInResults, const uint32_t size,
-                           const int sync_frequency) {
+                           const int sync_frequency, size_t maxResultsSize) {
     assert(!USE_ROTATE || size == MAX_SIZE);
     __builtin_assume(!USE_ROTATE || size == MAX_SIZE);
     __builtin_assume(size <= MAX_SIZE);
@@ -387,7 +385,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
     }
 
     if (threadIdx.x == 0)
-        results[bucketIdx * MAX_RESULTS_SIZE + offsetInResults + blockIdx.x] = s_result;
+        results[bucketIdx * maxResultsSize + offsetInResults + blockIdx.x] = s_result;
 }
 
 /**
@@ -500,9 +498,9 @@ class GPURecSplit
     }
 
   private:
-    array<uint32_t, 3> executeBucketKernels(uint32_t size, size_t *bucketIdxes, size_t numBuckets, cudaStream_t stream) {
+    array<uint32_t, 3> executeBucketKernels(uint32_t size, size_t *bucketIdxes, size_t numBuckets, cudaStream_t stream, size_t maxResultsSize) {
 
-        uint32_t num_results = executeHigherLevels(size, bucketIdxes, numBuckets, 0, 0, stream);
+        uint32_t num_results = executeHigherLevels(size, bucketIdxes, numBuckets, 0, 0, stream, maxResultsSize);
         array<uint32_t, 3> result_counts;
         result_counts[0] = num_results;
 
@@ -511,7 +509,7 @@ class GPURecSplit
             const int num_blocks = size / upper_aggr;
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
                 <<<dim3(num_blocks, numBuckets), UPPER_AGGR_BLOCK_SIZE, upper_aggr * sizeof(uint64_t), stream>>>(
-                device_keys, device_bucket_size_acc, device_results, bucketIdxes, 0, num_results, upper_aggr, upper_fanout);
+                device_keys, device_bucket_size_acc, device_results, bucketIdxes, 0, num_results, upper_aggr, upper_fanout, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -520,7 +518,7 @@ class GPURecSplit
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
                 <<<dim3(1, numBuckets), UPPER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc,
                  device_results, bucketIdxes, size - remaining,
-                num_results, remaining, uint16_t(remaining + lower_aggr - 1) / lower_aggr);
+                num_results, remaining, uint16_t(remaining + lower_aggr - 1) / lower_aggr, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
@@ -531,7 +529,7 @@ class GPURecSplit
             const int num_blocks = size / lower_aggr;
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
                 <<<dim3(num_blocks, numBuckets), LOWER_AGGR_BLOCK_SIZE, lower_aggr * sizeof(uint64_t), stream>>>(
-                device_keys, device_bucket_size_acc, device_results, bucketIdxes, 0, num_results, lower_aggr, lower_fanout);
+                device_keys, device_bucket_size_acc, device_results, bucketIdxes, 0, num_results, lower_aggr, lower_fanout, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -540,7 +538,7 @@ class GPURecSplit
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
                 <<<dim3(1, numBuckets), LOWER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys,
                      device_bucket_size_acc, device_results, bucketIdxes, size - remaining,
-                     num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE);
+                     num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
@@ -553,7 +551,7 @@ class GPURecSplit
             // for __builtin_assume in leafKernel
             static_assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0, "sync_frequency must be 0 for LEAF_SIZE < SYNC_THRESHOLD!");
             leafKernel<LEAF_SIZE, use_bijections_rotate><<<dim3(num_blocks, numBuckets), LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc,
-                 device_results, bucketIdxes, 0, num_results, LEAF_SIZE, sync_frequency);
+                 device_results, bucketIdxes, 0, num_results, LEAF_SIZE, sync_frequency, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -563,23 +561,23 @@ class GPURecSplit
             assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0); // for __builtin_assume in leafKernel
             leafKernel<LEAF_SIZE, false><<<dim3(1, numBuckets), LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc,
                 device_results, bucketIdxes, size - remaining,
-                num_results, remaining, sync_frequency);
+                num_results, remaining, sync_frequency, maxResultsSize);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
-        assert(num_results < MAX_RESULTS_SIZE);
+        assert(num_results < maxResultsSize);
         return result_counts;
     }
 
     uint32_t executeHigherLevels(size_t size, size_t *bucketIdxes, size_t numBuckets,
-                     size_t offsetInBucket, size_t offsetInResults, cudaStream_t stream, const int level = 0) {
+                     size_t offsetInBucket, size_t offsetInResults, cudaStream_t stream, size_t maxResultsSize, const int level = 0) {
         if (size > upper_aggr) {
             const uint32_t split = get_split(size, upper_aggr);
             higherLevelKernel<<<dim3(1, numBuckets), HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc, device_results,
-                bucketIdxes, offsetInBucket, offsetInResults, size, split, start_seed[level]);
+                bucketIdxes, offsetInBucket, offsetInResults, size, split, start_seed[level], maxResultsSize);
             checkCudaError(cudaGetLastError());
-            uint32_t skip_results = 1 + executeHigherLevels(split, bucketIdxes, numBuckets, offsetInBucket, offsetInResults + 1, stream, level + 1);
-            skip_results += executeHigherLevels(size - split, bucketIdxes, numBuckets, offsetInBucket + split, offsetInResults + skip_results, stream, level + 1);
+            uint32_t skip_results = 1 + executeHigherLevels(split, bucketIdxes, numBuckets, offsetInBucket, offsetInResults + 1, stream, maxResultsSize, level + 1);
+            skip_results += executeHigherLevels(size - split, bucketIdxes, numBuckets, offsetInBucket + split, offsetInResults + skip_results, stream, maxResultsSize, level + 1);
             return skip_results;
         }
         return 0;
@@ -669,9 +667,11 @@ class GPURecSplit
         std::vector<std::vector<size_t>> bucketsBySize;
         bucketsBySize.resize(MAX_BUCKET_SIZE);
 
+        size_t maxBucketSize = 0;
         for (size_t i = 0; i < this->nbuckets; i++) {
             size_t s = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
             bucketsBySize.at(s).push_back(i);
+            maxBucketSize = std::max(maxBucketSize, s);
 #ifdef MORESTATS
             auto upper_leaves = (s + _leaf - 1) / _leaf;
             auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
@@ -686,7 +686,8 @@ class GPURecSplit
 
         typename RiceBitVector<AT>::Builder builder;
 
-        const size_t results_size = this->nbuckets * MAX_RESULTS_SIZE * sizeof(uint32_t);
+        size_t maxResultsSize = 2 * (maxBucketSize / LEAF_SIZE + 1);
+        const size_t results_size = this->nbuckets * maxResultsSize * sizeof(uint32_t);
         uint32_t *host_results = static_cast<uint32_t *>(malloc(results_size));
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
@@ -707,7 +708,7 @@ class GPURecSplit
             }
             auto &buckets = bucketsBySize.at(bucketSize);
             checkCudaError(cudaMemcpyAsync(bucketIdxes, buckets.data(), buckets.size() * sizeof(size_t), cudaMemcpyHostToDevice));
-            result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes, buckets.size(), 0);
+            result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes, buckets.size(), 0, maxResultsSize);
         }
         checkCudaError(cudaStreamSynchronize(0));
         checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
@@ -716,7 +717,7 @@ class GPURecSplit
         for (size_t i = 0; i < this->nbuckets; i++) {
             size_t bucketSize = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
             auto result_counts_copy = result_counts[bucketSize];
-            unpackResults(bucketSize, host_results + i * MAX_RESULTS_SIZE, builder, unary, result_counts_copy);
+            unpackResults(bucketSize, host_results + i * maxResultsSize, builder, unary, result_counts_copy);
             builder.appendUnaryAll(unary);
             unary.clear();
             bucket_pos_acc[i + 1] = builder.getBits();
