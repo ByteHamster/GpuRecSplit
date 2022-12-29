@@ -98,7 +98,8 @@ static constexpr int SYNC_THRESHOLD = 14;
   * Computes one splitting of the higher levels with fanout 2 using a single thread block.
   */
 __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *__restrict__ bucket_size_acc,
-                                  size_t bucketIdx, size_t offsetInBucket, uint64_t *__restrict__ result,
+                                  uint64_t *__restrict__ results,
+                                  size_t bucketIdx, size_t offsetInBucket, size_t offsetInResults,
                                   const uint32_t size, const uint32_t split, const uint64_t seed) {
     __builtin_assume(size < MAX_BUCKET_SIZE);
     __builtin_assume(split < size);
@@ -136,7 +137,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
     }
 
     if (threadIdx.x == 0)
-        *result = s_result;
+        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -154,7 +155,8 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
   */
 template<int _MAX_FANOUT, int BLOCK_SIZE, uint32_t SPLIT, uint64_t SEED>
 __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__ bucket_size_acc,
-                           uint64_t bucketIdx, uint64_t offsetInBucket, uint64_t *__restrict__ result,
+                           uint64_t *__restrict__ results,
+                           uint64_t bucketIdx, uint64_t offsetInBucket, uint64_t offsetInResults,
                            const uint32_t size, const uint32_t fanout) {
     static_assert(_MAX_FANOUT <= 9, "aggrKernel only works for _MAX_FANOUT <= 9!");
     __builtin_assume(fanout > 1);
@@ -242,7 +244,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
     }
 
     if (threadIdx.x == 0)
-        result[blockIdx.x] = s_result;
+        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults + blockIdx.x] = s_result;
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
@@ -260,8 +262,9 @@ static constexpr uint32_t rotate(uint32_t val, uint32_t x) {
 
 template<uint32_t MAX_SIZE, bool USE_ROTATE>
 __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *__restrict__ bucket_size_acc,
-                           size_t bucketIdx, size_t offsetInBucket, uint64_t *__restrict__ result, const uint32_t size,
-        const int sync_frequency) {
+                           uint64_t *__restrict__ results,
+                           size_t bucketIdx, size_t offsetInBucket, size_t offsetInResults, const uint32_t size,
+                           const int sync_frequency) {
     assert(!USE_ROTATE || size == MAX_SIZE);
     __builtin_assume(!USE_ROTATE || size == MAX_SIZE);
     __builtin_assume(size <= MAX_SIZE);
@@ -379,7 +382,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
     }
 
     if (threadIdx.x == 0)
-        result[blockIdx.x] = s_result;
+        results[bucketIdx * MAX_BUCKET_SIZE + offsetInResults + blockIdx.x] = s_result;
 }
 
 /**
@@ -414,6 +417,7 @@ class GPURecSplit
     const size_t numStreamsPerThread = NUM_STREAMS / numThreads;
     uint64_t *device_keys;
     uint64_t *device_bucket_size_acc;
+    uint64_t *device_results;
   public:
     GPURecSplit() {}
 
@@ -491,10 +495,9 @@ class GPURecSplit
     }
 
   private:
-    array<uint32_t, 3> executeBucketKernels(uint32_t size, size_t bucketIdx,
-                              uint64_t *host_result, uint64_t *device_result, cudaStream_t stream) {
+    array<uint32_t, 3> executeBucketKernels(uint32_t size, size_t bucketIdx, cudaStream_t stream) {
 
-        uint32_t num_results = executeHigherLevels(size, bucketIdx, 0, device_result, stream);
+        uint32_t num_results = executeHigherLevels(size, bucketIdx, 0, 0, stream);
         array<uint32_t, 3> result_counts;
         result_counts[0] = num_results;
 
@@ -503,7 +506,7 @@ class GPURecSplit
             const int num_blocks = size / upper_aggr;
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
                 <<<num_blocks, UPPER_AGGR_BLOCK_SIZE, upper_aggr * sizeof(uint64_t), stream>>>(
-                device_keys, device_bucket_size_acc, bucketIdx, 0, device_result + num_results, upper_aggr, upper_fanout);
+                device_keys, device_bucket_size_acc, device_results, bucketIdx, 0, num_results, upper_aggr, upper_fanout);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -511,8 +514,8 @@ class GPURecSplit
         if (remaining > lower_aggr) {
             aggrKernel<upper_fanout, UPPER_AGGR_BLOCK_SIZE, lower_aggr, start_seed[NUM_START_SEEDS - 3]>
                 <<<1, UPPER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc,
-                 bucketIdx, size - remaining,
-                device_result + num_results, remaining, uint16_t(remaining + lower_aggr - 1) / lower_aggr);
+                 device_results, bucketIdx, size - remaining,
+                num_results, remaining, uint16_t(remaining + lower_aggr - 1) / lower_aggr);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
@@ -523,7 +526,7 @@ class GPURecSplit
             const int num_blocks = size / lower_aggr;
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
                 <<<num_blocks, LOWER_AGGR_BLOCK_SIZE, lower_aggr * sizeof(uint64_t), stream>>>(
-                device_keys, device_bucket_size_acc, bucketIdx, 0, device_result + num_results, lower_aggr, lower_fanout);
+                device_keys, device_bucket_size_acc, device_results, bucketIdx, 0, num_results, lower_aggr, lower_fanout);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -531,8 +534,8 @@ class GPURecSplit
         if (remaining > LEAF_SIZE) {
             aggrKernel<lower_fanout, LOWER_AGGR_BLOCK_SIZE, LEAF_SIZE, start_seed[NUM_START_SEEDS - 2]>
                 <<<1, LOWER_AGGR_BLOCK_SIZE, remaining * sizeof(uint64_t), stream>>>(device_keys,
-                     device_bucket_size_acc, bucketIdx, size - remaining,
-                     device_result + num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE);
+                     device_bucket_size_acc, device_results, bucketIdx, size - remaining,
+                     num_results, remaining, uint16_t(remaining + LEAF_SIZE - 1) / LEAF_SIZE);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
@@ -545,8 +548,7 @@ class GPURecSplit
             // for __builtin_assume in leafKernel
             static_assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0, "sync_frequency must be 0 for LEAF_SIZE < SYNC_THRESHOLD!");
             leafKernel<LEAF_SIZE, use_bijections_rotate><<<num_blocks, LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc,
-                 bucketIdx, 0,
-                device_result + num_results, LEAF_SIZE, sync_frequency);
+                 device_results, bucketIdx, 0, num_results, LEAF_SIZE, sync_frequency);
             checkCudaError(cudaGetLastError());
             num_results += num_blocks;
         }
@@ -554,25 +556,24 @@ class GPURecSplit
         if (remaining > 1) {
             const uint32_t sync_frequency = (1U << golomb_param(remaining)) / LEAF_BLOCK_SIZE / SYNC_CONST;
             assert(LEAF_SIZE >= SYNC_THRESHOLD || sync_frequency == 0); // for __builtin_assume in leafKernel
-            leafKernel<LEAF_SIZE, false><<<1, LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc, bucketIdx, size - remaining,
-                device_result + num_results, remaining, sync_frequency);
+            leafKernel<LEAF_SIZE, false><<<1, LEAF_BLOCK_SIZE, 0, stream>>>(device_keys, device_bucket_size_acc,
+                device_results, bucketIdx, size - remaining,
+                num_results, remaining, sync_frequency);
             checkCudaError(cudaGetLastError());
             num_results += 1;
         }
-
-        checkCudaError(cudaMemcpyAsync(host_result, device_result, num_results * sizeof(uint64_t), cudaMemcpyDeviceToHost, stream));
-
+        assert(num_results < MAX_BUCKET_SIZE);
         return result_counts;
     }
 
-    uint32_t executeHigherLevels(size_t size, size_t bucketIdx, size_t offsetInBucket, uint64_t *result, cudaStream_t stream, const int level = 0) {
+    uint32_t executeHigherLevels(size_t size, size_t bucketIdx, size_t offsetInBucket, size_t offsetInResults, cudaStream_t stream, const int level = 0) {
         if (size > upper_aggr) {
             const uint32_t split = get_split(size, upper_aggr);
-            higherLevelKernel<<<1, HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc,
-                bucketIdx, offsetInBucket, result, size, split, start_seed[level]);
+            higherLevelKernel<<<1, HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc, device_results,
+                bucketIdx, offsetInBucket, offsetInResults, size, split, start_seed[level]);
             checkCudaError(cudaGetLastError());
-            uint32_t skip_results = 1 + executeHigherLevels(split, bucketIdx, offsetInBucket, result + 1, stream, level + 1);
-            skip_results += executeHigherLevels(size - split, bucketIdx, offsetInBucket + split, result + skip_results, stream, level + 1);
+            uint32_t skip_results = 1 + executeHigherLevels(split, bucketIdx, offsetInBucket, offsetInResults + 1, stream, level + 1);
+            skip_results += executeHigherLevels(size - split, bucketIdx, offsetInBucket + split, offsetInResults + skip_results, stream, level + 1);
             return skip_results;
         }
         return 0;
@@ -659,114 +660,61 @@ class GPURecSplit
 #ifdef MORESTATS
         auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
 #endif
+        std::vector<std::vector<size_t>> bucketsBySize;
+        bucketsBySize.resize(MAX_BUCKET_SIZE);
+
+        for (size_t i = 0; i < this->nbuckets; i++) {
+            size_t s = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
+            bucketsBySize.at(s).push_back(i);
+#ifdef MORESTATS
+            auto upper_leaves = (s + _leaf - 1) / _leaf;
+            auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
+            auto upper_s = _leaf * pow(2, upper_height);
+            ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
+            ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
+            ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
+            minsize = min(minsize, s);
+            maxsize = max(maxsize, s);
+#endif
+        }
+
         typename RiceBitVector<AT>::Builder builder;
 
-        const size_t bucket_bytes = NUM_STREAMS * MAX_BUCKET_SIZE * sizeof(uint64_t);
+        const size_t results_size = this->nbuckets * MAX_BUCKET_SIZE * sizeof(uint64_t);
         uint64_t *host_results;
-        checkCudaError(cudaMallocHost(&host_results, bucket_bytes));
-        uint64_t *device_results;
-        checkCudaError(cudaMalloc(&device_results, bucket_bytes));
-
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice));
+        checkCudaError(cudaMalloc(&device_results, results_size));
+        checkCudaError(cudaMallocHost(&host_results, results_size));
 
         vector<thread> threads;
         threads.reserve(numThreads);
-        mutex mtx;
-        condition_variable condition;
-        int next_thread_to_append_builder = 0;
         bucket_pos_acc[0] = 0;
 
-        for (int tid = 0; tid < numThreads; ++tid) {
-            threads.emplace_back([&, tid] {
-                typename RiceBitVector<AT>::Builder local_builder;
-                vector<uint32_t> unary;
-                vector<array<uint32_t, 3>> result_counts(numStreamsPerThread);
-                cudaStream_t streams[numStreamsPerThread];
-                size_t begin = tid * this->nbuckets / numThreads;
-                size_t end = std::min(this->nbuckets, (tid + 1) * this->nbuckets / numThreads);
-                if (tid == numThreads - 1) {
-                    end = this->nbuckets;
-                }
-                size_t i;
-                for (i = begin; i < end; i++) {
-                    const size_t current_stream_id = i % numStreamsPerThread;
-                    const int bucket_offset = (tid * numStreamsPerThread + current_stream_id) * MAX_BUCKET_SIZE;
-                    cudaStream_t &current_stream = streams[current_stream_id];
-
-                    if (i - begin < numStreamsPerThread) {
-                        checkCudaError(cudaStreamCreate(&current_stream));
-                    } else {
-                        size_t bucket_size = bucket_size_acc[i - numStreamsPerThread + 1] - bucket_size_acc[i - numStreamsPerThread];
-                        if (bucket_size > 1) {
-                            checkCudaError(cudaStreamSynchronize(current_stream));
-                            unpackResults(bucket_size, host_results + bucket_offset, local_builder, unary, result_counts[current_stream_id]);
-                            local_builder.appendUnaryAll(unary);
-                            unary.clear();
-                        }
-                        bucket_pos_acc[i + 1 - numStreamsPerThread] = local_builder.getBits();
-                    }
-
-                    uint32_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
-                    if (s > 1) {
-                        result_counts[current_stream_id] = executeBucketKernels(s, i,
-                            host_results + bucket_offset, device_results + bucket_offset, current_stream);
-                    }
-#ifdef MORESTATS
-                    auto upper_leaves = (s + _leaf - 1) / _leaf;
-                    auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
-                    auto upper_s = _leaf * pow(2, upper_height);
-                    ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
-                    ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
-                    ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
-                    minsize = min(minsize, s);
-                    maxsize = max(maxsize, s);
-#endif
-                }
-                int _num_streams = numStreamsPerThread;
-                if (end - begin < numStreamsPerThread) {
-                    i = begin;
-                    _num_streams = 0;
-                }
-                for (; i < end + _num_streams; i++) {
-                    size_t bucket_size = bucket_size_acc[i - _num_streams + 1] - bucket_size_acc[i - _num_streams];
-                    if (bucket_size > 1) {
-                        const size_t current_stream_id = i % numStreamsPerThread;
-                        cudaStream_t &currentStream = streams[current_stream_id];
-                        const int bucket_offset = (tid * numStreamsPerThread + current_stream_id) * MAX_BUCKET_SIZE;
-                        checkCudaError(cudaStreamSynchronize(currentStream));
-                        unpackResults(bucket_size, host_results + bucket_offset, local_builder, unary, result_counts[current_stream_id]);
-                        local_builder.appendUnaryAll(unary);
-                        unary.clear();
-                    }
-                    bucket_pos_acc[i + 1 - _num_streams] = local_builder.getBits();
-                }
-
-                if (tid == 0) {
-                    builder = std::move(local_builder);
-                    lock_guard<mutex> lock(mtx);
-                    next_thread_to_append_builder = 1;
-                    condition.notify_all();
-                } else {
-                    uint64_t prev_bucket_pos;
-                    {
-                        unique_lock<mutex> lock(mtx);
-                        condition.wait(lock, [&] { return next_thread_to_append_builder == tid; });
-                        prev_bucket_pos = builder.getBits();
-                        builder.appendRiceBitVector(local_builder);
-                        next_thread_to_append_builder = tid + 1;
-                        condition.notify_all();
-                    }
-                    for (size_t i = begin + 1; i < end + 1; ++i) {
-                        bucket_pos_acc[i] += prev_bucket_pos;
-                    }
-                }
-            });
+        vector<array<uint32_t, 3>> result_counts(this->nbuckets);
+        for (size_t bucketSize = 2; bucketSize < MAX_BUCKET_SIZE; bucketSize++) {
+            if (bucketsBySize.at(bucketSize).empty()) {
+                continue;
+            }
+            for (size_t i = 0; i < bucketsBySize.at(bucketSize).size(); i++) {
+                size_t bucketIdx = bucketsBySize.at(bucketSize).at(i);
+                result_counts[bucketIdx] = executeBucketKernels(bucketSize, bucketIdx, 0);
+            }
         }
-        for (auto &thread : threads)
-            thread.join();
+        checkCudaError(cudaStreamSynchronize(0));
+        checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
+
+        for (size_t i = 0; i < this->nbuckets; i++) {
+            size_t bucketSize = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
+            vector<uint32_t> unary;
+            unpackResults(bucketSize, host_results + i * MAX_BUCKET_SIZE, builder, unary, result_counts[i]);
+            builder.appendUnaryAll(unary);
+            unary.clear();
+            bucket_pos_acc[i + 1] = builder.getBits();
+        }
+
         cudaDeviceReset();
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         this->descriptors = builder.build();
