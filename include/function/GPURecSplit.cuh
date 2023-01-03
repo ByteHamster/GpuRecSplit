@@ -691,17 +691,18 @@ class GPURecSplit
         size_t maxResultsSize = 2 * (maxBucketSize / LEAF_SIZE + 1);
         const size_t results_size = this->nbuckets * maxResultsSize * sizeof(uint32_t);
         uint32_t *host_results = static_cast<uint32_t *>(malloc(results_size));
+        if (host_results == nullptr) {
+            printf("Unable to allocate %d bytes on host", results_size);
+            exit(errno);
+        }
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
         checkCudaError(cudaMemcpy(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_results, results_size));
         size_t *bucketIdxes;
-        checkCudaError(cudaMalloc(&bucketIdxes, std::min(maxNumBucketsWithSameSize, CUDA_MAX_GRID) * NUM_STREAMS * sizeof(size_t)));
-
-        vector<thread> threads;
-        threads.reserve(numThreads);
-        bucket_pos_acc[0] = 0;
+        size_t bucketIdxesStreamOffset = std::min(maxNumBucketsWithSameSize, CUDA_MAX_GRID);
+        checkCudaError(cudaMalloc(&bucketIdxes, bucketIdxesStreamOffset * NUM_STREAMS * sizeof(size_t)));
 
         std::vector<cudaStream_t> streams;
         streams.resize(NUM_STREAMS);
@@ -719,14 +720,15 @@ class GPURecSplit
             for (size_t from = 0; from < numBuckets; from += CUDA_MAX_GRID) {
                 size_t batchSize = std::min(numBuckets - from, CUDA_MAX_GRID);
                 size_t streamIdx = bucketSize % NUM_STREAMS; // Round-robin
-                checkCudaError(cudaMemcpyAsync(bucketIdxes + streamIdx * maxNumBucketsWithSameSize, buckets.data() + from, batchSize * sizeof(size_t), cudaMemcpyHostToDevice, streams[streamIdx]));
-                result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes + streamIdx * maxNumBucketsWithSameSize,
+                checkCudaError(cudaMemcpyAsync(bucketIdxes + streamIdx * bucketIdxesStreamOffset, buckets.data() + from, batchSize * sizeof(size_t), cudaMemcpyHostToDevice, streams[streamIdx]));
+                result_counts[bucketSize] = executeBucketKernels(bucketSize, bucketIdxes + streamIdx * bucketIdxesStreamOffset,
                                      batchSize, streams[streamIdx], maxResultsSize);
             }
         }
         checkCudaError(cudaDeviceSynchronize());
         checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
 
+        bucket_pos_acc[0] = 0;
         vector<uint32_t> unary;
         for (size_t i = 0; i < this->nbuckets; i++) {
             size_t bucketSize = bucket_size_acc.at(i + 1) - bucket_size_acc.at(i);
