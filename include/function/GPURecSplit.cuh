@@ -702,11 +702,8 @@ class GPURecSplit
 
         size_t maxResultsSize = 2 * (maxBucketSize / LEAF_SIZE + 1);
         const size_t results_size = this->nbuckets * maxResultsSize * sizeof(uint32_t);
-        uint32_t *host_results = static_cast<uint32_t *>(malloc(results_size));
-        if (host_results == nullptr) {
-            printf("Unable to allocate %d bytes on host", results_size);
-            exit(errno);
-        }
+        uint32_t *host_results;
+        checkCudaError(cudaMallocHost(&host_results, results_size));
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
         checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
         checkCudaError(cudaMalloc(&device_results, results_size));
@@ -769,7 +766,7 @@ class GPURecSplit
 #endif
 
         cudaDeviceReset();
-        free(host_results);
+        cudaFreeHost(host_results);
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         this->descriptors = builder.build();
         this->ef = DoubleEF<AT, true>(bucket_size_acc, bucket_pos_acc);
