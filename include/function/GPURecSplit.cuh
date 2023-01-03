@@ -662,7 +662,8 @@ class GPURecSplit
 #endif
         this->parallelPartition(hashes, sorted_keys, bucket_size_acc, numThreads);
 #ifdef MORESTATS
-        auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
+        auto sorting_end_time = high_resolution_clock::now();
+        auto sorting_time = duration_cast<nanoseconds>(sorting_end_time - sorting_start_time).count();
 #endif
         std::vector<std::vector<size_t>> bucketsBySize;
         bucketsBySize.resize(MAX_BUCKET_SIZE);
@@ -675,18 +676,29 @@ class GPURecSplit
             maxBucketSize = std::max(maxBucketSize, s);
             maxNumBucketsWithSameSize = std::max(maxNumBucketsWithSameSize, bucketsBySize.at(s).size());
 #ifdef MORESTATS
-            auto upper_leaves = (s + _leaf - 1) / _leaf;
+            /*auto upper_leaves = (s + _leaf - 1) / _leaf;
             auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
             auto upper_s = _leaf * pow(2, upper_height);
             ub_split_bits += (double)upper_s / (_leaf * 2) * log2(2 * M_PI * _leaf) - .5 * log2(2 * M_PI * upper_s);
             ub_bij_bits += upper_leaves * _leaf * (log2e - .5 / _leaf * log2(2 * M_PI * _leaf));
             ub_split_evals += 4 * upper_s * sqrt(pow(2 * M_PI * upper_s, 2 - 1) / pow(2, 2));
             minsize = min(minsize, s);
-            maxsize = max(maxsize, s);
+            maxsize = max(maxsize, s);*/
 #endif
         }
 
+#ifdef MORESTATS
+        auto bucket_by_size_end_time = high_resolution_clock::now();
+        auto bucket_by_size_time = duration_cast<nanoseconds>(bucket_by_size_end_time - sorting_end_time).count();
+#endif
+
         typename RiceBitVector<AT>::Builder builder;
+
+        std::vector<cudaStream_t> streams;
+        streams.resize(NUM_STREAMS);
+        for (cudaStream_t &stream : streams) {
+            checkCudaError(cudaStreamCreate(&stream));
+        }
 
         size_t maxResultsSize = 2 * (maxBucketSize / LEAF_SIZE + 1);
         const size_t results_size = this->nbuckets * maxResultsSize * sizeof(uint32_t);
@@ -696,19 +708,20 @@ class GPURecSplit
             exit(errno);
         }
         checkCudaError(cudaMalloc(&device_keys, this->keys_count * sizeof(uint64_t)));
-        checkCudaError(cudaMemcpy(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_bucket_size_acc, this->nbuckets * sizeof(uint64_t)));
-        checkCudaError(cudaMemcpy(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice));
         checkCudaError(cudaMalloc(&device_results, results_size));
         size_t *bucketIdxes;
         size_t bucketIdxesStreamOffset = std::min(maxNumBucketsWithSameSize, CUDA_MAX_GRID);
         checkCudaError(cudaMalloc(&bucketIdxes, bucketIdxesStreamOffset * NUM_STREAMS * sizeof(size_t)));
 
-        std::vector<cudaStream_t> streams;
-        streams.resize(NUM_STREAMS);
-        for (cudaStream_t &stream : streams) {
-            checkCudaError(cudaStreamCreate(&stream));
-        }
+        checkCudaError(cudaMemcpyAsync(device_keys, sorted_keys.data(), this->keys_count * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[0]));
+        checkCudaError(cudaMemcpyAsync(device_bucket_size_acc, bucket_size_acc.data(), this->nbuckets * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[1]));
+        cudaDeviceSynchronize();
+
+#ifdef MORESTATS
+        auto alloc_end_time = high_resolution_clock::now();
+        auto alloc_time = duration_cast<nanoseconds>(alloc_end_time - bucket_by_size_end_time).count();
+#endif
 
         vector<array<uint32_t, 3>> result_counts(MAX_BUCKET_SIZE);
         for (size_t bucketSize = 2; bucketSize < MAX_BUCKET_SIZE; bucketSize++) {
@@ -725,8 +738,19 @@ class GPURecSplit
                                      batchSize, streams[streamIdx], maxResultsSize);
             }
         }
+
+#ifdef MORESTATS
+        auto cuda_submit_end_time = high_resolution_clock::now();
+        auto cuda_submit_time = duration_cast<nanoseconds>(cuda_submit_end_time - alloc_end_time).count();
+#endif
+
         checkCudaError(cudaDeviceSynchronize());
         checkCudaError(cudaMemcpy(host_results, device_results, results_size, cudaMemcpyDeviceToHost));
+
+#ifdef MORESTATS
+        auto cuda_end_time = high_resolution_clock::now();
+        auto cuda_time = duration_cast<nanoseconds>(cuda_end_time - cuda_submit_end_time).count();
+#endif
 
         bucket_pos_acc[0] = 0;
         vector<uint32_t> unary;
@@ -738,6 +762,11 @@ class GPURecSplit
             unary.clear();
             bucket_pos_acc[i + 1] = builder.getBits();
         }
+
+#ifdef MORESTATS
+        auto unpack_end_time = high_resolution_clock::now();
+        auto unpack_time = duration_cast<nanoseconds>(unpack_end_time - cuda_end_time).count();
+#endif
 
         cudaDeviceReset();
         free(host_results);
@@ -764,12 +793,17 @@ class GPURecSplit
         printf("Max bucket size: %lu\n", maxsize);
 
         printf("\n");
-        printf("Total time: %13.3f ms\n", duration_cast<nanoseconds>(high_resolution_clock::now() - total_start_time).count() * 1E-6);
-        printf("Sorting time: %11.3f ms\n", sorting_time * 1E-6);
-        printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
+        printf("Total time:          %11.3f ms\n", duration_cast<nanoseconds>(high_resolution_clock::now() - total_start_time).count() * 1E-6);
+        printf("Sorting time:        %11.3f ms\n", sorting_time * 1E-6);
+        printf("Bucket sorting time: %11.3f ms\n", bucket_by_size_time * 1E-6);
+        printf("Alloc time:          %11.3f ms\n", alloc_time * 1E-6);
+        printf("Cuda submit time:    %11.3f ms\n", cuda_submit_time * 1E-6);
+        printf("Cuda wait time:      %11.3f ms\n", cuda_time * 1E-6);
+        printf("Unpack time:         %11.3f ms\n", unpack_time * 1E-6);
+        printf("Bijections:          %11.3f ms\n", time_bij * 1E-6);
         for (int i = 0; i < MAX_LEVEL_TIME; i++) {
             if (time_split[i] > 0) {
-                printf("Split level %d: %10.3f ms\n", i, time_split[i] * 1E-6);
+                printf("Split level %d:      %11.3f ms\n", i, time_split[i] * 1E-6);
             }
         }
 
