@@ -16,3 +16,6 @@
 [submodule "extlib/sux"]
 	path = extlib/sux
 	url = git@github.com:ByteHamster-etc/sux.git
+[submodule "extlib/ips4o"]
+	path = extlib/ips4o
+	url = https://github.com/ips4o/ips4o.git

@@ -18,10 +18,15 @@ find_package(TBB)
 target_compile_options(ips2ra INTERFACE -D_REENTRANT)
 target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
 
+set(IPS4O_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
+add_subdirectory(extlib/ips4o)
+target_compile_options(ips4o INTERFACE -D_REENTRANT)
+target_link_libraries(ips4o INTERFACE pthread atomic TBB::tbb)
+
 add_library(Ips2raRecSplitSorter SHARED src/Sorter.cpp)
 target_compile_features(Ips2raRecSplitSorter PRIVATE cxx_std_20)
 target_include_directories(Ips2raRecSplitSorter PRIVATE include)
-target_link_libraries(Ips2raRecSplitSorter PUBLIC ips2ra tlx)
+target_link_libraries(Ips2raRecSplitSorter PUBLIC ips2ra tlx ips4o)
 target_compile_options(Ips2raRecSplitSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 # ---------------------------- Library Setup ----------------------------
