@@ -8,7 +8,7 @@ return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
 }
 
 void testRotationFitting(size_t l) {
-    size_t numIterations = std::max(2ul, (size_t) 1e7 / (1<<l));
+    size_t numIterations = std::max(2ul, (size_t) 7e7 / (1<<l));
     size_t totalTries = 0;
     size_t hfEvals = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
@@ -53,7 +53,7 @@ void testRotationFitting(size_t l) {
 }
 
 void testBruteForce(size_t l) {
-    size_t numIterations = std::max(2ul, (size_t) 1e7 / (1<<l));
+    size_t numIterations = std::max(2ul, (size_t) 4e7 / (1<<l));
     size_t totalTries = 0;
     size_t hfEvals = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
@@ -89,7 +89,7 @@ void testBruteForce(size_t l) {
 }
 
 void testShockHash(size_t l) {
-    size_t numIterations = l <= 30 ? 10000 : (l <= 43 ? 2000 : 500);
+    size_t numIterations = l <= 30 ? 20000 : (l <= 43 ? 4000 : 1000);
     size_t totalTries = 0;
     size_t hfEvals = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
@@ -113,7 +113,7 @@ void testShockHash(size_t l) {
 }
 
 int main() {
-    for (size_t l = 3; l < 50; l++) {
+    for (size_t l = 2; l <= 20; l++) {
         if (l <= 25) {
             testRotationFitting(l);
         }
