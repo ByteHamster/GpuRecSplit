@@ -4,10 +4,10 @@ project(GPURecSplit LANGUAGES CXX)
 
 # ---------------------------- Dependencies ----------------------------
 add_library(vectorclass INTERFACE)
-target_include_directories(vectorclass INTERFACE extlib/vectorclass)
+target_include_directories(vectorclass SYSTEM INTERFACE extlib/vectorclass)
 
 add_library(gcem INTERFACE)
-target_include_directories(gcem INTERFACE extlib/gcem/include)
+target_include_directories(gcem SYSTEM INTERFACE extlib/gcem/include)
 
 add_library(Sux INTERFACE)
 target_include_directories(Sux SYSTEM INTERFACE extlib/sux)
@@ -29,7 +29,11 @@ target_compile_options(Ips2raRecSplitSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-m
 # Standard RecSplit
 add_library(RecSplit INTERFACE)
 target_compile_features(RecSplit INTERFACE cxx_std_20)
-target_include_directories(RecSplit INTERFACE include)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+	target_include_directories(RecSplit INTERFACE include)
+else()
+	target_include_directories(RecSplit SYSTEM INTERFACE include)
+endif()
 target_link_libraries(RecSplit INTERFACE gcem)
 target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
@@ -40,7 +44,11 @@ if (CMAKE_CUDA_COMPILER)
 	enable_language(CUDA)
 
 	add_library(GPURecSplit INTERFACE)
-	target_include_directories(GPURecSplit INTERFACE include)
+	if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+		target_include_directories(GPURecSplit INTERFACE include)
+	else()
+		target_include_directories(GPURecSplit SYSTEM INTERFACE include)
+	endif()
 	target_compile_features(GPURecSplit INTERFACE cxx_std_20)
 	target_compile_options(GPURecSplit INTERFACE --expt-relaxed-constexpr)
 	target_compile_options(GPURecSplit INTERFACE -Xcompiler="-march=native")
@@ -49,7 +57,11 @@ endif()
 
 # SIMDRecSplit
 add_library(SIMDRecSplit INTERFACE)
-target_include_directories(SIMDRecSplit INTERFACE include)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+	target_include_directories(SIMDRecSplit INTERFACE include)
+else()
+	target_include_directories(SIMDRecSplit SYSTEM INTERFACE include)
+endif()
 target_compile_features(SIMDRecSplit INTERFACE cxx_std_20)
 target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
 target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread Ips2raRecSplitSorter)
@@ -57,7 +69,11 @@ target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=n
 
 # ShockHash
 add_library(ShockHash INTERFACE)
-target_include_directories(ShockHash INTERFACE include)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+	target_include_directories(ShockHash INTERFACE include)
+else()
+	target_include_directories(ShockHash SYSTEM INTERFACE include)
+endif()
 target_compile_features(ShockHash INTERFACE cxx_std_20)
 target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon)
 
