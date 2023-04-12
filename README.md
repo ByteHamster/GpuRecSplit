@@ -74,7 +74,7 @@ docker run --interactive --tty -v "$(pwd)/scripts/dockerVolume:/opt/dockerVolume
 
 | Figure                                                               | Launch command                                | Estimated runtime  |
 | :------------------------------------------------------------------- | :-------------------------------------------- | :----------------- |
-| Figure 3 <br /><img src="preview-gpurecsplit-figure-3" width="300"/> | /opt/dockerVolume/brute-force-vs-rotations.sh | 30 minutes         |
+| Figure 3 <br /><img src="preview-gpurecsplit-figure-3.png" width="300"/> | /opt/dockerVolume/brute-force-vs-rotations.sh | 30 minutes         |
 
 The resulting plots can be found in `scripts/dockerVolume` and have the file extension `.pdf`.
 More experiments comparing GpuRecSplit with competitors can be found in a different repository: https://github.com/ByteHamster/MPHF-Experiments
