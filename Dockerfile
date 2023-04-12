@@ -18,7 +18,7 @@ COPY . /opt/gpurecsplit
 RUN mkdir /opt/gpurecsplit/build
 WORKDIR /opt/gpurecsplit/build
 RUN cmake -DCMAKE_BUILD_TYPE=Release ..
-RUN cmake --build . -j 8
+RUN cmake --build . -j 8 --target recsplit_construction
 
 # Actual benchmark
-CMD bash /opt/dockerVolume/figure-1.sh
+CMD bash /opt/dockerVolume/brute-force-vs-rotations.sh
