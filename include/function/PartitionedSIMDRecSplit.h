@@ -1,6 +1,7 @@
 #pragma once
 #include <function/SIMDRecSplit.hpp>
 #include <thread>
+#include <Function.h>
 
 namespace bez::function {
 /**

@@ -67,16 +67,6 @@ target_compile_options(SIMDRecSplit INTERFACE -DSIMD)
 target_link_libraries(SIMDRecSplit INTERFACE gcem vectorclass pthread Ips2raRecSplitSorter)
 target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
-# ShockHash
-add_library(ShockHash INTERFACE)
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-	target_include_directories(ShockHash INTERFACE include)
-else()
-	target_include_directories(ShockHash SYSTEM INTERFACE include)
-endif()
-target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon)
-
 # ---------------------------- Benchmarks ----------------------------
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_library(BenchmarkUtils INTERFACE)
@@ -106,7 +96,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	target_link_libraries(recsplit_correctness PUBLIC RecSplit BenchmarkUtils)
 
 	add_executable(recsplit_construction benchmark/benchmark_construction.cpp)
-	target_link_libraries(recsplit_construction PUBLIC RecSplit BenchmarkUtils ShockHash)
+	target_link_libraries(recsplit_construction PUBLIC RecSplit BenchmarkUtils)
 
 	# GPURecSplit
 	if (CMAKE_CUDA_COMPILER)
@@ -149,7 +139,4 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
 	add_executable(simdrecsplit_construction benchmark/benchmark_construction.cpp)
 	target_link_libraries(simdrecsplit_construction PUBLIC SIMDRecSplit BenchmarkUtils)
-
-	add_executable(NumHashEvals test/numHashEvals.cpp)
-	target_link_libraries(NumHashEvals PUBLIC BenchmarkUtils)
 endif()

@@ -27,8 +27,6 @@ template<size_t LEAF_SIZE>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "GPURecSplit";
 #else
-#define SHOCKHASH_ENABLED
-#include <shockhash/ShockHash.h>
 #include <function/RecSplit.hpp>
 template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
@@ -134,11 +132,6 @@ int constructAll(int argc, const char* const* argv) {
     } else if (leafMethod == "rotations") {
         dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     }
-#ifdef SHOCKHASH_ENABLED
-    else if (leafMethod == "cuckoo") {
-        dispatchLeafSize<shockhash::ShockHash, sux::function::hash128_t, shockhash::MAX_LEAF_SIZE>(leafSize);
-    }
-#endif
     else {
         std::cerr<<"Invalid leaf mode argument: "<<leafMethod<<std::endl;
     }

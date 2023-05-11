@@ -26,7 +26,7 @@ Clone (with submodules, `git clone --recursive`) this repo and add it to your `C
 
 ```
 add_subdirectory(path/to/GpuRecSplit)
-target_link_libraries(YourTarget PRIVATE RecSplit SIMDRecSplit GPURecSplit ShockHash) # or a subset of the targets
+target_link_libraries(YourTarget PRIVATE RecSplit SIMDRecSplit GPURecSplit) # or a subset of the targets
 ```
 
 ### Reproducing Experiments
