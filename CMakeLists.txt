@@ -3,26 +3,36 @@ cmake_policy(SET CMP0048 NEW)
 project(GPURecSplit LANGUAGES CXX)
 
 # ---------------------------- Dependencies ----------------------------
-add_library(vectorclass INTERFACE)
-target_include_directories(vectorclass SYSTEM INTERFACE extlib/vectorclass)
+if(NOT TARGET vectorclass)
+	add_library(vectorclass INTERFACE)
+	target_include_directories(vectorclass SYSTEM INTERFACE extlib/vectorclass)
+endif()
 
-add_library(gcem INTERFACE)
-target_include_directories(gcem SYSTEM INTERFACE extlib/gcem/include)
+if(NOT TARGET gcem)
+	add_library(gcem INTERFACE)
+	target_include_directories(gcem SYSTEM INTERFACE extlib/gcem/include)
+endif()
 
-add_library(Sux INTERFACE)
-target_include_directories(Sux SYSTEM INTERFACE extlib/sux)
+if(NOT TARGET Sux)
+	add_library(Sux INTERFACE)
+	target_include_directories(Sux SYSTEM INTERFACE extlib/sux)
+endif()
 
+if(NOT TARGET ips2ra)
 set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
 add_subdirectory(extlib/simpleRibbon)
 find_package(TBB)
 target_compile_options(ips2ra INTERFACE -D_REENTRANT)
 target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
+endif()
 
-add_library(Ips2raRecSplitSorter SHARED src/Sorter.cpp)
-target_compile_features(Ips2raRecSplitSorter PRIVATE cxx_std_20)
-target_include_directories(Ips2raRecSplitSorter PRIVATE include)
-target_link_libraries(Ips2raRecSplitSorter PUBLIC ips2ra tlx)
-target_compile_options(Ips2raRecSplitSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+if(NOT TARGET Ips2raRecSplitSorter)
+	add_library(Ips2raRecSplitSorter SHARED src/Sorter.cpp)
+	target_compile_features(Ips2raRecSplitSorter PRIVATE cxx_std_20)
+	target_include_directories(Ips2raRecSplitSorter PRIVATE include)
+	target_link_libraries(Ips2raRecSplitSorter PUBLIC ips2ra tlx)
+	target_compile_options(Ips2raRecSplitSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+endif()
 
 # ---------------------------- Library Setup ----------------------------
 
