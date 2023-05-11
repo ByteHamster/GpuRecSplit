@@ -14,9 +14,9 @@ using TestRecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT>;
 template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
 using TestRecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
-#include <function/RecSplit.hpp>
+#include <function/RecSplitRotate.hpp>
 template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
-using TestRecSplit = bez::function::RecSplit<LEAF_SIZE, AT>;
+using TestRecSplit = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, AT>;
 #endif
 
 using namespace std;

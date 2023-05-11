@@ -27,11 +27,11 @@ template<size_t LEAF_SIZE>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "GPURecSplit";
 #else
-#include <function/RecSplit.hpp>
+#include <function/RecSplitRotate.hpp>
 template<size_t LEAF_SIZE>
-using RecSplitRotate = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+using RecSplitRotate = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
-using RecSplit = bez::function::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
+using RecSplit = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
 std::string name = "CpuRecSplit";
 #endif
 

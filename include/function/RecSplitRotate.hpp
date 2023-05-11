@@ -33,10 +33,6 @@
 
 #pragma once
 
-#include "../util/Vector.hpp"
-#include "DoubleEF.hpp"
-#include "RiceBitVector.hpp"
-#include "golombRiceMemo.hpp"
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -46,16 +42,13 @@
 #include <fstream>
 #include <limits>
 #include <util/Hash128.h>
+#include "../util/Vector.hpp"
+#include "DoubleEF.hpp"
+#include "RiceBitVector.hpp"
+#include "golombRiceMemo.hpp"
+#include "AbstractParallelRecSplit.hpp"
 
-// Define constexpr namespace ce
-#ifdef _MSC_VER
-#include "src/support/gcem.hpp"
-namespace ce = gcem;
-#else
-namespace ce = std;
-#endif // _MVC_VER
-
-namespace bez::function {
+namespace bez::function::recsplit_rotate {
 
 using namespace std;
 using namespace std::chrono;
