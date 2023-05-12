@@ -629,7 +629,7 @@ class SIMDRecSplit
         } else {
             [[maybe_unused]] uint64_t x;
             if (m > upper_aggr) { // fanout = 2
-                const size_t split = get_split(m, upper_aggr);
+                const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
                 x = higherLevel(bucket, temp, start, m, split, builder, unary, level);
                 recSplit(bucket, temp, start, split, builder, unary, level + 1);
                 if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1);

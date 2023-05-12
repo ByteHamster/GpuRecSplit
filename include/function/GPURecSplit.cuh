@@ -572,7 +572,7 @@ class GPURecSplit
     uint32_t executeHigherLevels(size_t size, size_t *bucketIdxes, size_t numBuckets,
                      size_t offsetInBucket, size_t offsetInResults, cudaStream_t stream, size_t maxResultsSize, const int level = 0) {
         if (size > upper_aggr) {
-            const uint32_t split = get_split(size, upper_aggr);
+            const uint32_t split = ((uint16_t(size / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
             higherLevelKernel<<<dim3(1, numBuckets), HIGHER_LEVEL_BLOCK_SIZE, size * sizeof(uint64_t), stream>>>(device_keys, device_bucket_size_acc, device_results,
                 bucketIdxes, offsetInBucket, offsetInResults, size, split, start_seed[level], maxResultsSize);
             checkCudaError(cudaGetLastError());
@@ -596,7 +596,7 @@ class GPURecSplit
             const uint64_t x = result[higher_level_pos++];
             builder.appendFixed(x, log2golomb);
             unary.push_back(x >> log2golomb);
-            const size_t split = get_split(size, upper_aggr);
+            const size_t split = ((uint16_t(size / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
             unpackResults(split, result, builder, unary, result_counts, higher_level_pos);
             if (size - split > 1)
                 unpackResults(size - split, result, builder, unary, result_counts, higher_level_pos);

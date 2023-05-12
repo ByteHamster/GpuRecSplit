@@ -113,20 +113,6 @@ static constexpr uint64_t bij_memo_golomb[] = {0,        0,        1,         3,
                                                29874507, 79265963, 210551258, 559849470, 1490011429, 3968988882, 10580669970, 28226919646, 75354118356};
 #endif
 
-/**
-  * Provides a balanced split for the higher levels. It leads to more balanced splitting trees
-  * than in the original RecSplit implementation without costing more.
-  */
-constexpr size_t get_split(size_t m, size_t aggr) {
-    /*size_t rounded_down = aggr * ((m / 2) / aggr);
-    size_t rounded_up = aggr * ((m / 2 + aggr - 1) / aggr);
-    return rounded_up < (m - rounded_down) ? rounded_up : rounded_down;*/
-
-    // The following can have different results than the above, but they are
-    // equally good (the difference to m/2 is equal).
-    return aggr * ((m / 2 + aggr / 2) / aggr);
-}
-
 /** A class emboding the splitting strategy of RecSplit.
  *
  *  Note that this class is used _for statistics only_. The splitting strategy is embedded
@@ -151,7 +137,7 @@ template <size_t LEAF_SIZE> class SplittingStrategy {
 
     static inline constexpr void split_params(const size_t m, size_t &fanout, size_t &unit) {
         if (m > upper_aggr) { // High-level aggregation (fanout 2)
-            unit = get_split(m, upper_aggr);
+            unit = upper_aggr * (uint16_t(m / 2 + upper_aggr - 1) / upper_aggr);
             fanout = 2;
         } else if (m > lower_aggr) { // Second-level aggregation
             unit = lower_aggr;
@@ -437,7 +423,7 @@ class AbstractParallelRecSplit {
             const auto d = reader.readNext(golomb_param(m));
             const size_t hmod = remap(hash.second + d + start_seed[level], m);
 
-            const uint32_t split = get_split(m, upper_aggr);
+            const uint32_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
             if (hmod < split) {
                 m = split;
             } else {
