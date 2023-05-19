@@ -44,7 +44,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
 	target_include_directories(RecSplit SYSTEM INTERFACE include)
 endif()
-target_link_libraries(RecSplit INTERFACE gcem)
+target_link_libraries(RecSplit INTERFACE gcem pthread Ips2raRecSplitSorter)
 target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 # GPURecSplit

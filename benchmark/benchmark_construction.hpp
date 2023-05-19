@@ -57,11 +57,7 @@ void construct() {
 
     std::cout<<"Constructing"<<std::endl;
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    RecSplit rs(keys, bucketSize
-                        #if (defined(SIMD) || defined(GPU))
-                            , numThreads
-                        #endif
-                        );
+    RecSplit rs(keys, bucketSize, numThreads);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 

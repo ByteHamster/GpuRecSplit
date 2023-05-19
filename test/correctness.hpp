@@ -40,13 +40,9 @@ bool test() {
             util::XorShift64 prng(0x5603141978c51071);
 			for (uint64_t i = 0; i < size; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 
-#if (defined(SIMD) || defined(GPU))
 			int num_threads = std::thread::hardware_concurrency();
 			num_threads = num_threads == 0 ? 1 : num_threads;
 			TestRecSplit<FROM_LEAF> rs(keys, bucket_size, num_threads);
-#else
-			TestRecSplit<FROM_LEAF> rs(keys, bucket_size);
-#endif
 
 			std::cout << "l = " << FROM_LEAF << ", b = " << bucket_size << ", n = " << size << ": ";
 			correct &= testCorrectness(rs, keys);

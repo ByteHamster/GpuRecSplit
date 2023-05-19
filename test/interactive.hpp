@@ -33,13 +33,9 @@ void interactive(int argc, char** argv) {
 			keys.push_back(bez::function::first_hash(key.c_str(), key.size()));
 		}
 	}
-#if (defined(SIMD) || defined(GPU))
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
 	auto recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE, num_threads);
-#else
-	auto recSplit = RecSplit<LEAF_SIZE>(keys, BUCKET_SIZE);
-#endif
 	for (std::string s; std::cin >> s;) {
 		if (s == "/cout") {
 			std::ofstream myfile;

@@ -77,15 +77,10 @@ int build(int argc, char **argv) {
 #define ALLOC_TYPE_APPEND
 #endif
 
-#if (defined(SIMD) || defined(GPU))
 	int num_threads = std::thread::hardware_concurrency();
 	num_threads = num_threads == 0 ? 1 : num_threads;
 	auto begin = chrono::high_resolution_clock::now();
 	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size, num_threads);
-#else
-	auto begin = chrono::high_resolution_clock::now();
-	RecSplit<LEAF ALLOC_TYPE_APPEND> rs(keys, bucket_size);
-#endif
 
 	auto elapsed = chrono::duration_cast<std::chrono::nanoseconds>(chrono::high_resolution_clock::now() - begin).count();
 	printf("Construction time: %.3f s, %.0f ns/key\n", elapsed * 1E-9, elapsed / (double)n);

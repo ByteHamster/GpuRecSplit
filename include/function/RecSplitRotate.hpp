@@ -42,6 +42,8 @@
 #include <fstream>
 #include <limits>
 #include <util/Hash128.h>
+#include <thread>
+#include <condition_variable>
 #include "../util/Vector.hpp"
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
@@ -140,14 +142,33 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    RecSplit(const vector<string> &keys, const size_t bucket_size) {
+    RecSplit(const vector<string> &keys, const size_t bucket_size, const size_t num_threads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
-        for (size_t i = 0; i < this->keys_count; ++i) {
-            h[i] = first_hash(keys[i].c_str(), keys[i].size());
+
+        if (num_threads == 1) {
+            for (size_t i = 0; i < this->keys_count; ++i) {
+                h[i] = first_hash(keys[i].c_str(), keys[i].size());
+            }
+        } else {
+            size_t keysPerThread = this->keys_count / num_threads + 1;
+            std::vector<std::thread> threads;
+            for (size_t thread = 0; thread < num_threads; thread++) {
+                threads.emplace_back([&, thread] {
+                    size_t from = thread * keysPerThread;
+                    size_t to = std::min(this->keys_count, (thread + 1) * keysPerThread);
+                    for (size_t i = from; i < to; ++i) {
+                        h[i] = first_hash(keys[i].c_str(), keys[i].size());
+                    }
+                });
+            }
+            for (std::thread &t : threads) {
+                t.join();
+            }
         }
-        hash_gen(h);
+
+        hash_gen(h, num_threads);
         free(h);
     }
 
@@ -161,10 +182,10 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    RecSplit(vector<hash128_t> &keys, const size_t bucket_size) {
+    RecSplit(vector<hash128_t> &keys, const size_t bucket_size, const size_t num_threads) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
-        hash_gen(&keys[0]);
+        hash_gen(&keys[0], num_threads);
     }
 
     /** Builds a RecSplit instance using a list of keys returned by a stream and bucket size.
@@ -174,35 +195,30 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
      * @param input an open input stream returning a list of keys, one per line.
      * @param bucket_size the desired bucket size.
      */
-    RecSplit(ifstream& input, const size_t bucket_size) {
+    RecSplit(ifstream& input, const size_t bucket_size, const size_t num_threads) {
         this->bucket_size = bucket_size;
         vector<hash128_t> h;
         for(string key; getline(input, key);) h.push_back(first_hash(key.c_str(), key.size()));
         this->keys_count = h.size();
-        hash_gen(&h[0]);
+        hash_gen(&h[0], num_threads);
     }
 
     /** Returns the number of keys used to build this RecSplit instance. */
     inline size_t size() { return this->keys_count; }
 
   private:
-    // Computes and stores the splittings and bijections of a bucket.
-    void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary) {
-        const auto m = bucket.size();
-        vector<uint64_t> temp(m);
-        recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0);
-    }
-
     static constexpr uint32_t rotate(uint32_t val, uint8_t x) {
         return ((val << x) | (val >> (LEAF_SIZE - x))) & ((1 << LEAF_SIZE) - 1);
     }
 
-    void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level) {
+    void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
+                  typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level = 0) {
         const auto m = end - start;
         assert(m > 1);
+        uint64_t x;
 
         if (m <= _leaf) {
-            uint64_t x = start_seed[NUM_START_SEEDS - 1];
+            x = start_seed[NUM_START_SEEDS - 1];
 #ifdef MORESTATS
             sum_depths += m * level;
             auto start_time = high_resolution_clock::now();
@@ -310,7 +326,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
             auto start_time = high_resolution_clock::now();
 #endif
             if (m > upper_aggr) { // fanout = 2
-                uint64_t x = start_seed[level];
+                x = start_seed[level];
                 const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
 
                 size_t count[2];
@@ -347,7 +363,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
                     sum_depths += level;
 #endif
             } else if (m > lower_aggr) { // 2nd aggregation level
-                uint64_t x = start_seed[NUM_START_SEEDS - 3];
+                x = start_seed[NUM_START_SEEDS - 3];
                 const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
 #ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
@@ -392,7 +408,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
                     sum_depths += level;
 #endif
             } else { // First aggregation level, m <= lower_aggr
-                uint64_t x = start_seed[NUM_START_SEEDS - 2];
+                x = start_seed[NUM_START_SEEDS - 2];
                 const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
 #ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
@@ -442,7 +458,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
             num_split_trials += x + 1;
             double e_trials = 1;
             size_t aux = m;
-            SplitStrat strat{m};
+            SplittingStrategy<LEAF_SIZE> strat{m};
             auto v = strat.begin();
             for (int i = 0; i < strat.fanout(); ++i, ++v) {
                 e_trials *= pow((double)m / *v, *v);
@@ -468,56 +484,26 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
         }
     }
 
-    void hash_gen(hash128_t *hashes) {
-#ifdef MORESTATS
-        time_bij = 0;
-        memset(time_split, 0, sizeof time_split);
-        split_unary = split_fixed = 0;
-        bij_unary = bij_fixed = 0;
-        min_split_code = 1ULL << 63;
-        max_split_code = sum_split_codes = 0;
-        min_bij_code = 1ULL << 63;
-        max_bij_code = sum_bij_codes = 0;
-        sum_depths = 0;
-        size_t minsize = keys_count, maxsize = 0;
-        double ub_split_bits = 0, ub_bij_bits = 0;
-        double ub_split_evals = 0;
-
-        auto total_start_time = high_resolution_clock::now();
-#endif
-
-#ifndef __SIZEOF_INT128__
-        if (keys_count > (1ULL << 32)) {
-            fprintf(stderr, "For more than 2^32 keys, you need 128-bit integer support.\n");
-            abort();
+    void compute_thread(int tid, int num_threads, mutex &mtx, std::condition_variable &condition,
+                        vector<uint64_t> &bucket_size_acc, vector<uint64_t> &bucket_pos_acc,
+                        vector<uint64_t> &sorted_keys, int &next_thread_to_append_builder,
+                        typename RiceBitVector<AT>::Builder &builder) {
+        typename RiceBitVector<AT>::Builder local_builder;
+        vector<uint32_t> unary;
+        vector<uint64_t> temp(MAX_BUCKET_SIZE);
+        size_t begin = tid * this->nbuckets / num_threads;
+        size_t end = std::min(this->nbuckets, (tid + 1) * this->nbuckets / num_threads);
+        if (tid == num_threads - 1) {
+            end = this->nbuckets;
         }
-#endif
-        nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
-        auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
-        auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
-        // TODO: Bucketsort?
-#ifdef MORESTATS
-        auto sorting_start_time = high_resolution_clock::now();
-#endif
-        sort(hashes, hashes + keys_count, [this](const hash128_t &a, const hash128_t &b) { return hash128_to_bucket(a) < hash128_to_bucket(b); });
-#ifdef MORESTATS
-        auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
-#endif
-        typename RiceBitVector<AT>::Builder builder;
-
-        bucket_size_acc[0] = bucket_pos_acc[0] = 0;
-        for (size_t i = 0, last = 0; i < nbuckets; i++) {
-            vector<uint64_t> bucket;
-            for (; last < keys_count && hash128_to_bucket(hashes[last]) == i; last++) bucket.push_back(hashes[last].second);
-
-            const size_t s = bucket.size();
-            bucket_size_acc[i + 1] = bucket_size_acc[i] + s;
-            if (bucket.size() > 1) {
-                vector<uint32_t> unary;
-                recSplit(bucket, builder, unary);
-                builder.appendUnaryAll(unary);
+        for (size_t i = begin; i < end; ++i) {
+            const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
+            if (s > 1) {
+                recSplit(sorted_keys, temp, bucket_size_acc[i], bucket_size_acc[i + 1], local_builder, unary);
+                local_builder.appendUnaryAll(unary);
+                unary.clear();
             }
-            bucket_pos_acc[i + 1] = builder.getBits();
+            bucket_pos_acc[i + 1] = local_builder.getBits();
 #ifdef MORESTATS
             auto upper_leaves = (s + _leaf - 1) / _leaf;
             auto upper_height = ceil(log(upper_leaves) / log(2)); // TODO: check
@@ -529,10 +515,92 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
             maxsize = max(maxsize, s);
 #endif
         }
+        if (tid == 0) {
+            builder = std::move(local_builder);
+            lock_guard<mutex> lock(mtx);
+            next_thread_to_append_builder = 1;
+            condition.notify_all();
+        } else {
+            uint64_t prev_bucket_pos;
+            {
+                unique_lock<mutex> lock(mtx);
+                condition.wait(lock, [&] { return next_thread_to_append_builder == tid; });
+                prev_bucket_pos = builder.getBits();
+                builder.appendRiceBitVector(local_builder);
+                next_thread_to_append_builder = tid + 1;
+                condition.notify_all();
+            }
+            for (size_t i = begin + 1; i < end + 1; ++i) {
+                bucket_pos_acc[i] += prev_bucket_pos;
+            }
+        }
+    }
+
+    void hash_gen(hash128_t *hashes, int num_threads) {
+#ifdef MORESTATS
+        time_bij = 0;
+        memset(time_split, 0, sizeof time_split);
+        split_unary = split_fixed = 0;
+        bij_unary = bij_fixed = 0;
+        min_split_code = 1ULL << 63;
+        max_split_code = sum_split_codes = 0;
+        min_bij_code = 1ULL << 63;
+        max_bij_code = sum_bij_codes = 0;
+        sum_depths = 0;
+        minsize = this->keys_count;
+        maxsize = 0;
+        ub_split_bits = 0;
+        ub_bij_bits = 0;
+        ub_split_evals = 0;
+
+        auto total_start_time = high_resolution_clock::now();
+#endif
+
+#ifndef __SIZEOF_INT128__
+        if (keys_count > (1ULL << 32)) {
+            fprintf(stderr, "For more than 2^32 keys, you need 128-bit integer support.\n");
+            abort();
+        }
+#endif
+        nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
+        auto bucket_size_acc = vector<uint64_t>(nbuckets + 1);
+        auto bucket_pos_acc = vector<uint64_t>(nbuckets + 1);
+        auto sorted_keys = vector<uint64_t>(keys_count);
+
+#ifdef MORESTATS
+        auto sorting_start_time = high_resolution_clock::now();
+#endif
+        this->parallelPartition(hashes, sorted_keys, bucket_size_acc, num_threads);
+#ifdef MORESTATS
+        auto sorting_time = duration_cast<nanoseconds>(high_resolution_clock::now() - sorting_start_time).count();
+#endif
+        typename RiceBitVector<AT>::Builder builder;
+
+        vector<thread> threads;
+        threads.reserve(num_threads);
+        mutex mtx;
+        std::condition_variable condition;
+        int next_thread_to_append_builder = 0;
+        bucket_pos_acc[0] = 0;
+        if (num_threads == 1) {
+            compute_thread(0, num_threads, mtx, condition,
+                           bucket_size_acc, bucket_pos_acc, sorted_keys,
+                           next_thread_to_append_builder, builder);
+        } else {
+            for (int tid = 0; tid < num_threads; ++tid) {
+                threads.emplace_back([&, tid] {
+                    compute_thread(tid, num_threads, mtx, condition,
+                                   bucket_size_acc, bucket_pos_acc, sorted_keys,
+                                   next_thread_to_append_builder, builder);
+                });
+            }
+            for (auto &thread: threads) {
+                thread.join();
+            }
+        }
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         descriptors = builder.build();
-        // TODO: unnecessary copy. Why is bucket_size_acc not uint64_t in the first place?
-        ef = DoubleEF<AT, true>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
+        ef = DoubleEF<AT, true>(bucket_size_acc, bucket_pos_acc);
 
 #ifdef STATS
         // Evaluation purposes only
@@ -554,7 +622,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
 
         printf("\n");
         printf("Total time: %13.3f ms\n", duration_cast<nanoseconds>(high_resolution_clock::now() - total_start_time).count() * 1E-6);
-        printf("Sorting time: %13.3f ms\n", sorting_time * 1E-6);
+        printf("Sorting time: %11.3f ms\n", sorting_time * 1E-6);
         printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
         for (int i = 0; i < MAX_LEVEL_TIME; i++) {
             if (time_split[i] > 0) {
