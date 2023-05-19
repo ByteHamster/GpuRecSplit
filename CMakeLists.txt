@@ -20,7 +20,7 @@ endif()
 
 if(NOT TARGET ips2ra)
 	set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
-	add_subdirectory(extlib/simpleRibbon)
+	add_subdirectory(extlib/ips2ra)
 	find_package(TBB)
 	target_compile_options(ips2ra INTERFACE -D_REENTRANT)
 	target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
