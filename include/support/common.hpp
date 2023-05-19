@@ -35,9 +35,7 @@
 #include <inttypes.h>
 #include <memory>
 
-#ifdef _MSC_VER
-#include <intrin.h>
-#else
+#if defined(__x86_64__)
 #include <x86intrin.h>
 #endif
 

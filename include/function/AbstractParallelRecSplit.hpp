@@ -45,7 +45,6 @@
 #include <cmath>
 #include <string>
 #include <vector>
-#include <immintrin.h>
 #include <util/Sorter.hpp>
 #include <util/Hash128.h>
 
