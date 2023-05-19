@@ -53,9 +53,6 @@ namespace bez::function::recsplit_rotate {
 using namespace std;
 using namespace std::chrono;
 
-// Assumed *maximum* size of a bucket. Works with high probability up to average bucket size ~2000.
-static const int MAX_BUCKET_SIZE = 3000;
-
 static const int MAX_LEAF_SIZE = 24;
 static const int MAX_FANOUT = 32;
 
@@ -85,174 +82,12 @@ static uint64_t time_split[MAX_LEVEL_TIME];
 #define M_PI 3.14159265358979323846 // This is somehow necessary with MSVC
 #endif
 
-// Starting seed at given distance from the root (extracted at random).
-static const uint64_t start_seed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb, 0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73,
-                                      0x082f20e10092a9a3, 0x2ada2ce68d21defc, 0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
-                                      0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815, 0xcd4216006c74052a};
-
-/** David Stafford's (http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html)
- * 13th variant of the 64-bit finalizer function in Austin Appleby's
- * MurmurHash3 (https://github.com/aappleby/smhasher).
- *
- * @param z a 64-bit integer.
- * @return a 64-bit integer obtained by mixing the bits of `z`.
- */
-
-uint64_t inline remix(uint64_t z) {
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-    return z ^ (z >> 31);
-}
-
-// Quick replacements for min/max on not-so-large integers.
-
-static constexpr inline uint64_t min(int64_t x, int64_t y) { return y + ((x - y) & ((x - y) >> 63)); }
-static constexpr inline uint64_t max(int64_t x, int64_t y) { return x - ((x - y) & ((x - y) >> 63)); }
-
-// Optimal Golomb-Rice parameters for leaves.
-static constexpr uint8_t bij_memo[] = {0, 0, 0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 21, 22, 23, 25, 26, 28, 29, 30};
-
 #ifdef MORESTATS
 // Optimal Golomb code moduli for leaves (for stats).
 static constexpr uint64_t bij_memo_golomb[] = {0,        0,        1,         3,         7,          18,         45,          113,         288,        740,
                                                1910,     4954,     12902,     33714,     88350,      232110,     611118,      1612087,     4259803,    11273253,
                                                29874507, 79265963, 210551258, 559849470, 1490011429, 3968988882, 10580669970, 28226919646, 75354118356};
 #endif
-
-/** A class emboding the splitting strategy of RecSplit.
- *
- *  Note that this class is used _for statistics only_. The splitting strategy is embedded
- *  into the generation code, which uses only the public fields SplittingStrategy::lower_aggr and SplittingStrategy::upper_aggr.
- */
-
-template <size_t LEAF_SIZE> class SplittingStrategy {
-    static constexpr size_t _leaf = LEAF_SIZE;
-    static_assert(_leaf >= 1);
-    static_assert(_leaf <= MAX_LEAF_SIZE);
-    size_t m, curr_unit, curr_index, last_unit;
-    size_t _fanout;
-    size_t unit;
-
-    inline size_t part_size() const { return (curr_index < _fanout - 1) ? unit : last_unit; }
-
-  public:
-    /** The lower bound for primary (lower) key aggregation. */
-    static constexpr size_t lower_aggr = _leaf * max(2, ce::ceil(0.35 * _leaf + 1. / 2));
-    /** The lower bound for secondary (upper) key aggregation. */
-    static constexpr size_t upper_aggr = lower_aggr * (_leaf < 7 ? 2 : ce::ceil(0.21 * _leaf + 9. / 10));
-
-    static inline constexpr void split_params(const size_t m, size_t &fanout, size_t &unit) {
-        if (m > upper_aggr) { // High-level aggregation (fanout 2)
-            unit = upper_aggr * (uint16_t(m / 2 + upper_aggr - 1) / upper_aggr);
-            fanout = 2;
-        } else if (m > lower_aggr) { // Second-level aggregation
-            unit = lower_aggr;
-            fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
-        } else { // First-level aggregation
-            unit = _leaf;
-            fanout = uint16_t(m + _leaf - 1) / _leaf;
-        }
-    }
-
-    // Note that you can call this iterator only *once*.
-    class split_iterator {
-        SplittingStrategy *strat;
-
-      public:
-        using value_type = size_t;
-        using difference_type = ptrdiff_t;
-        using pointer = size_t *;
-        using reference = size_t &;
-        using iterator_category = input_iterator_tag;
-
-        split_iterator(SplittingStrategy *strat) : strat(strat) {}
-        size_t operator*() const { return strat->curr_unit; }
-        size_t *operator->() const { return &strat->curr_unit; }
-        split_iterator &operator++() {
-            ++strat->curr_index;
-            strat->curr_unit = strat->part_size();
-            strat->last_unit -= strat->curr_unit;
-            return *this;
-        }
-        bool operator==(const split_iterator &other) const { return strat == other.strat; }
-        bool operator!=(const split_iterator &other) const { return !(*this == other); }
-    };
-
-    explicit SplittingStrategy(size_t m) : m(m), last_unit(m), curr_index(0), curr_unit(0) {
-        split_params(m, _fanout, unit);
-        this->curr_unit = part_size();
-        this->last_unit -= this->curr_unit;
-    }
-
-    split_iterator begin() { return split_iterator(this); }
-    split_iterator end() { return split_iterator(nullptr); }
-
-    inline size_t fanout() { return this->_fanout; }
-};
-
-// Generates the precomputed table of 32-bit values holding the Golomb-Rice code
-// of a splitting (upper 5 bits), the number of nodes in the associated subtree
-// (following 11 bits) and the sum of the Golomb-Rice codelengths in the same
-// subtree (lower 16 bits).
-
-template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice(const int m, array<uint32_t, MAX_BUCKET_SIZE> *memo) {
-    array<int, MAX_FANOUT> k{0};
-
-    size_t fanout = 0, unit = 0;
-    SplittingStrategy<LEAF_SIZE>::split_params(m, fanout, unit);
-
-    k[fanout - 1] = m;
-    for (size_t i = 0; i < fanout - 1; ++i) {
-        k[i] = unit;
-        k[fanout - 1] -= k[i];
-    }
-
-    double sqrt_prod = 1;
-    for (size_t i = 0; i < fanout; ++i) sqrt_prod *= ce::sqrt(k[i]);
-
-    const double p = ce::sqrt(m) / (ce::pow(2 * M_PI, (fanout - 1.) / 2) * sqrt_prod);
-    auto golomb_rice_length = (uint32_t)ce::ceil(ce::log2(-ce::log((ce::sqrt(5) + 1) / 2) / ce::log1p(-p))); // log2 Golomb modulus
-
-    assert(golomb_rice_length <= 0x1F); // Golomb-Rice code, stored in the 5 upper bits
-    (*memo)[m] = golomb_rice_length << 27;
-    for (size_t i = 0; i < fanout; ++i) golomb_rice_length += (*memo)[k[i]] & 0xFFFF;
-    assert(golomb_rice_length <= 0xFFFF); // Sum of Golomb-Rice codeslengths in the subtree, stored in the lower 16 bits
-    (*memo)[m] |= golomb_rice_length;
-
-    uint32_t nodes = 1;
-    for (size_t i = 0; i < fanout; ++i) nodes += ((*memo)[k[i]] >> 16) & 0x7FF;
-    assert(LEAF_SIZE < 3 || nodes <= 0x7FF); // Number of nodes in the subtree, stored in the middle 11 bits
-    (*memo)[m] |= nodes << 16;
-}
-
-template <size_t LEAF_SIZE> static constexpr array<uint32_t, MAX_BUCKET_SIZE> fill_golomb_rice() {
-    array<uint32_t, MAX_BUCKET_SIZE> memo{0};
-    size_t s = 0;
-    for (; s <= LEAF_SIZE; ++s) memo[s] = bij_memo[s] << 27 | (s > 1) << 16 | bij_memo[s];
-    for (; s < MAX_BUCKET_SIZE; ++s) _fill_golomb_rice<LEAF_SIZE>(s, &memo);
-    return memo;
-}
-
-// Computes the Golomb modulu of a splitting (for statistics purposes only)
-
-template <size_t LEAF_SIZE> static constexpr uint64_t split_golomb_b(const int m) {
-    array<int, MAX_FANOUT> k{0};
-
-    size_t fanout = 0, unit = 0;
-    SplittingStrategy<LEAF_SIZE>::split_params(m, fanout, unit);
-
-    k[fanout - 1] = m;
-    for (size_t i = 0; i < fanout - 1; ++i) {
-        k[i] = unit;
-        k[fanout - 1] -= k[i];
-    }
-
-    double sqrt_prod = 1;
-    for (size_t i = 0; i < fanout; ++i) sqrt_prod *= ce::sqrt(k[i]);
-
-    const double p = ce::sqrt(m) / (ce::pow(2 * M_PI, (fanout - 1.) / 2) * sqrt_prod);
-    return ce::ceil(-log(2 - p) / log1p(-p)); // Golomb modulus
-}
 
 // Computes the point at which one should stop to test whether
 // bijection extraction failed (around the square root of the leaf size).
@@ -262,11 +97,6 @@ static constexpr array<uint8_t, MAX_LEAF_SIZE> fill_bij_midstop() {
     for (int s = 0; s < MAX_LEAF_SIZE; ++s) memo[s] = s < (int)ce::ceil(2 * ce::sqrt(s)) ? s : (int)ce::ceil(2 * ce::sqrt(s));
     return memo;
 }
-
-#define first_hash(k, len) spooky(k, len, 0)
-#define golomb_param(m) (memo[m] >> 27)
-#define skip_bits(m) (memo[m] & 0xFFFF)
-#define skip_nodes(m) ((memo[m] >> 16) & 0x7FF)
 
 /**
  *
@@ -279,26 +109,25 @@ static constexpr array<uint8_t, MAX_LEAF_SIZE> fill_bij_midstop() {
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true> class RecSplit {
-    using SplitStrat = SplittingStrategy<LEAF_SIZE>;
+template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
+class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, true> {
+    using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, true>;
+    using Superclass::SplitStrat;
+    using Superclass::_leaf;
+    using Superclass::lower_aggr;
+    using Superclass::upper_aggr;
+    using Superclass::memo;
+    using Superclass::use_bijections_rotate;
+    using Superclass::remixAndRemap;
 
-    static constexpr size_t _leaf = LEAF_SIZE;
-    static constexpr size_t lower_aggr = SplitStrat::lower_aggr;
-    static constexpr size_t upper_aggr = SplitStrat::upper_aggr;
-
-    // For each bucket size, the Golomb-Rice parameter (upper 8 bits) and the number of bits to
-    // skip in the fixed part of the tree (lower 24 bits).
-    static constexpr array<uint32_t, MAX_BUCKET_SIZE> memo = get_golomb_rice_memo(LEAF_SIZE);
     static constexpr array<uint8_t, MAX_LEAF_SIZE> bij_midstop = fill_bij_midstop();
 
-    static constexpr bool use_bijections_rotate = USE_BIJECTIONS_ROTATE;
-
-    size_t bucket_size;
-    size_t nbuckets;
-    size_t keys_count;
-    RiceBitVector<AT> descriptors;
-    DoubleEF<AT> ef;
-
+    using Superclass::ef;
+    using Superclass::descriptors;
+    using Superclass::nbuckets;
+    using Superclass::keys_count;
+    using Superclass::bucket_size;
+    using Superclass::hash128_to_bucket;
   public:
     RecSplit() {}
 
@@ -353,92 +182,10 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
         hash_gen(&h[0]);
     }
 
-    /** Returns the value associated with the given 128-bit hash.
-     *
-     * Note that this method is mainly useful for benchmarking.
-     * @param hash a 128-bit hash.
-     * @return the associated value.
-     */
-    size_t operator()(const hash128_t &hash) {
-        const size_t bucket = hash128_to_bucket(hash);
-        uint64_t cum_keys, cum_keys_next, bit_pos;
-        ef.get(bucket, cum_keys, cum_keys_next, bit_pos);
-
-        // Number of keys in this bucket
-        size_t m = cum_keys_next - cum_keys;
-        auto reader = descriptors.reader();
-        reader.readReset(bit_pos, skip_bits(m));
-        int level = 0;
-
-        while (m > upper_aggr) { // fanout = 2
-            const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap16(remix(hash.second + d + start_seed[level]), m);
-
-            const uint32_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
-            if (hmod < split) {
-                m = split;
-            } else {
-                reader.skipSubtree(skip_nodes(split), skip_bits(split));
-                m -= split;
-                cum_keys += split;
-            }
-            level++;
-        }
-        if (m > lower_aggr) {
-            const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap16(remix(hash.second + d + start_seed[level]), m);
-
-            const int part = uint16_t(hmod) / lower_aggr;
-            m = min(lower_aggr, m - part * lower_aggr);
-            cum_keys += lower_aggr * part;
-            if (part) reader.skipSubtree(skip_nodes(lower_aggr) * part, skip_bits(lower_aggr) * part);
-            level++;
-        }
-
-        if (m > _leaf) {
-            const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap16(remix(hash.second + d + start_seed[level]), m);
-
-            const int part = uint16_t(hmod) / _leaf;
-            m = min(_leaf, m - part * _leaf);
-            cum_keys += _leaf * part;
-            if (part) reader.skipSubtree(part, skip_bits(_leaf) * part);
-            level++;
-        }
-
-        const auto b = reader.readNext(golomb_param(m));
-        const uint64_t x = hash.second + b + start_seed[level];
-        uint64_t leaf_val;
-        if (use_bijections_rotate && m == _leaf) {
-            const uint64_t rotation = b % _leaf;
-            leaf_val = remap16(remix(x - rotation), _leaf);
-            if (hash.second % 2 != 0) // is not left => need to rotate
-                leaf_val = (leaf_val + rotation) % LEAF_SIZE;
-        } else {
-            leaf_val = remap16(remix(x), m);
-        }
-        return cum_keys + leaf_val;
-    }
-
-    /** Returns the value associated with the given key.
-     *
-     * @param key a key.
-     * @return the associated value.
-     */
-    size_t operator()(const string &key) { return operator()(first_hash(key.c_str(), key.size())); }
-
     /** Returns the number of keys used to build this RecSplit instance. */
     inline size_t size() { return this->keys_count; }
 
-    /** Returns an estimate of the size in bits of this structure. */
-    size_t getBits() {
-        return ef.bitCountCumKeys() + ef.bitCountPosition() + descriptors.getBits() + 8 * sizeof(*this);
-    }
-
   private:
-    // Maps a 128-bit to a bucket using the first 64-bit half.
-    inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
-
     // Computes and stores the splittings and bijections of a bucket.
     void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary) {
         const auto m = bucket.size();
@@ -453,9 +200,9 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
     void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level) {
         const auto m = end - start;
         assert(m > 1);
-        uint64_t x = start_seed[level];
 
         if (m <= _leaf) {
+            uint64_t x = start_seed[NUM_START_SEEDS - 1];
 #ifdef MORESTATS
             sum_depths += m * level;
             auto start_time = high_resolution_clock::now();
@@ -480,13 +227,13 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                     uint32_t mask_left = 0;
                     uint32_t mask_right = 0;
                     for (int i = 0; i < items_left_count; i++) {
-                        mask_left |= uint32_t(1) << remap16(remix(items_left[i] + x), LEAF_SIZE);
+                        mask_left |= uint32_t(1) << remixAndRemap(items_left[i] + x, LEAF_SIZE);
                     }
                     if (nu(mask_left) != items_left_count) {
                         continue; // Collisions in left part
                     }
                     for (int i = 0; i < items_right_count; i++) {
-                        mask_right |= uint32_t(1) << remap16(remix(items_right[i] + x), LEAF_SIZE);
+                        mask_right |= uint32_t(1) << remixAndRemap(items_right[i] + x, LEAF_SIZE);
                     }
                     if (nu(mask_right) != items_right_count) {
                         continue; // Collisions in right part
@@ -509,7 +256,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                 if constexpr (_leaf <= 8) {
                     for (;;) {
                         mask = 0;
-                        for (size_t i = start; i < end; i++) mask |= uint32_t(1) << remap16(remix(bucket[i] + x), m);
+                        for (size_t i = start; i < end; i++) mask |= uint32_t(1) << remixAndRemap(bucket[i] + x, m);
 #ifdef MORESTATS
                         num_bij_evals[m] += m;
 #endif
@@ -521,12 +268,12 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                     for (;;) {
                         mask = 0;
                         size_t i;
-                        for (i = start; i < start + midstop; i++) mask |= uint32_t(1) << remap16(remix(bucket[i] + x), m);
+                        for (i = start; i < start + midstop; i++) mask |= uint32_t(1) << remixAndRemap(bucket[i] + x, m);
 #ifdef MORESTATS
                         num_bij_evals[m] += midstop;
 #endif
                         if (nu(mask) == midstop) {
-                            for (; i < end; i++) mask |= uint32_t(1) << remap16(remix(bucket[i] + x), m);
+                            for (; i < end; i++) mask |= uint32_t(1) << remixAndRemap(bucket[i] + x, m);
 #ifdef MORESTATS
                             num_bij_evals[m] += m - midstop;
 #endif
@@ -539,7 +286,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
 #ifdef MORESTATS
             time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
-            x -= start_seed[level];
+            x -= start_seed[NUM_START_SEEDS - 1];
             const auto log2golomb = golomb_param(m);
             builder.appendFixed(x, log2golomb);
             unary.push_back(x >> log2golomb);
@@ -563,13 +310,14 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
             auto start_time = high_resolution_clock::now();
 #endif
             if (m > upper_aggr) { // fanout = 2
+                uint64_t x = start_seed[level];
                 const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
 
                 size_t count[2];
                 for (;;) {
                     count[0] = 0;
                     for (size_t i = start; i < end; i++) {
-                        count[remap16(remix(bucket[i] + x), m) >= split]++;
+                        count[remixAndRemap(bucket[i] + x, m) >= split]++;
 #ifdef MORESTATS
                         ++num_split_evals;
 #endif
@@ -581,7 +329,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                 count[0] = 0;
                 count[1] = split;
                 for (size_t i = start; i < end; i++) {
-                    temp[count[remap16(remix(bucket[i] + x), m) >= split]++] = bucket[i];
+                    temp[count[remixAndRemap(bucket[i] + x, m) >= split]++] = bucket[i];
                 }
                 copy(&temp[0], &(temp.data()[m]), &bucket[start]);
                 x -= start_seed[level];
@@ -599,6 +347,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                     sum_depths += level;
 #endif
             } else if (m > lower_aggr) { // 2nd aggregation level
+                uint64_t x = start_seed[NUM_START_SEEDS - 3];
                 const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
 #ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
@@ -608,7 +357,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                 for (;;) {
                     memset(count, 0, sizeof count - sizeof *count);
                     for (size_t i = start; i < end; i++) {
-                        count[uint16_t(remap16(remix(bucket[i] + x), m)) / lower_aggr]++;
+                        count[uint16_t(remixAndRemap(bucket[i] + x, m)) / lower_aggr]++;
 #ifdef MORESTATS
                         ++num_split_evals;
 #endif
@@ -621,11 +370,11 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
 
                 for (size_t i = 0, c = 0; i < fanout; i++, c += lower_aggr) count[i] = c;
                 for (size_t i = start; i < end; i++) {
-                    temp[count[uint16_t(remap16(remix(bucket[i] + x), m)) / lower_aggr]++] = bucket[i];
+                    temp[count[uint16_t(remixAndRemap(bucket[i] + x, m)) / lower_aggr]++] = bucket[i];
                 }
                 copy(&temp[0], &(temp.data()[m]), &bucket[start]);
 
-                x -= start_seed[level];
+                x -= start_seed[NUM_START_SEEDS - 3];
                 const auto log2golomb = golomb_param(m);
                 builder.appendFixed(x, log2golomb);
                 unary.push_back(x >> log2golomb);
@@ -643,6 +392,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                     sum_depths += level;
 #endif
             } else { // First aggregation level, m <= lower_aggr
+                uint64_t x = start_seed[NUM_START_SEEDS - 2];
                 const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
 #ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
@@ -652,7 +402,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                 for (;;) {
                     memset(count, 0, sizeof count - sizeof *count);
                     for (size_t i = start; i < end; i++) {
-                        count[uint16_t(remap16(remix(bucket[i] + x), m)) / _leaf]++;
+                        count[uint16_t(remixAndRemap(bucket[i] + x, m)) / _leaf]++;
 #ifdef MORESTATS
                         ++num_split_evals;
 #endif
@@ -664,11 +414,11 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
                 }
                 for (size_t i = 0, c = 0; i < fanout; i++, c += _leaf) count[i] = c;
                 for (size_t i = start; i < end; i++) {
-                    temp[count[uint16_t(remap16(remix(bucket[i] + x), m)) / _leaf]++] = bucket[i];
+                    temp[count[uint16_t(remixAndRemap(bucket[i] + x, m)) / _leaf]++] = bucket[i];
                 }
                 copy(&temp[0], &(temp.data()[m]), &bucket[start]);
 
-                x -= start_seed[level];
+                x -= start_seed[NUM_START_SEEDS - 2];
                 const auto log2golomb = golomb_param(m);
                 builder.appendFixed(x, log2golomb);
                 unary.push_back(x >> log2golomb);
@@ -782,7 +532,7 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         descriptors = builder.build();
         // TODO: unnecessary copy. Why is bucket_size_acc not uint64_t in the first place?
-        ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
+        ef = DoubleEF<AT, true>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
 #ifdef STATS
         // Evaluation purposes only
@@ -869,32 +619,6 @@ template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool U
         printf("Total bij bits:         %16.3f\n", (double)bij_fixed + bij_unary);
         printf("Upper bound bij bits:   %16.3f\n\n", ub_bij_bits);
 #endif
-    }
-
-    friend ostream &operator<<(ostream &os, const RecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> &rs) {
-        const size_t leaf_size = LEAF_SIZE;
-        os.write((char *)&leaf_size, sizeof(leaf_size));
-        os.write((char *)&rs.bucket_size, sizeof(rs.bucket_size));
-        os.write((char *)&rs.keys_count, sizeof(rs.keys_count));
-        os << rs.descriptors;
-        os << rs.ef;
-        return os;
-    }
-
-    friend istream &operator>>(istream &is, RecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> &rs) {
-        size_t leaf_size;
-        is.read((char *)&leaf_size, sizeof(leaf_size));
-        if (leaf_size != LEAF_SIZE) {
-            fprintf(stderr, "Serialized leaf size %d, code leaf size %d\n", int(leaf_size), int(LEAF_SIZE));
-            abort();
-        }
-        is.read((char *)&rs.bucket_size, sizeof(bucket_size));
-        is.read((char *)&rs.keys_count, sizeof(keys_count));
-        rs.nbuckets = max(1, (rs.keys_count + rs.bucket_size - 1) / rs.bucket_size);
-
-        is >> rs.descriptors;
-        is >> rs.ef;
-        return is;
     }
 };
 

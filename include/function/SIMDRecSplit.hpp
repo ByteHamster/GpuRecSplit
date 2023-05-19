@@ -160,8 +160,8 @@ static constexpr array<uint32_t, 4 + MAX_FANOUT + FULL_VEC_32_COUNT> fill_aggr_l
 
 template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
 class SIMDRecSplit
-    : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> {
-    using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
+    : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false> {
+    using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false>;
     using Superclass::SplitStrat;
     using Superclass::_leaf;
     using Superclass::lower_aggr;
@@ -896,32 +896,6 @@ class SIMDRecSplit
         printf("Total bij bits:         %16.3f\n", (double)bij_fixed + bij_unary);
         printf("Upper bound bij bits:   %16.3f\n\n", ub_bij_bits);
 #endif
-    }
-
-    friend ostream &operator<<(ostream &os, const SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> &rs) {
-        const size_t leaf_size = LEAF_SIZE;
-        os.write((char *)&leaf_size, sizeof(leaf_size));
-        os.write((char *)&rs.bucket_size, sizeof(rs.bucket_size));
-        os.write((char *)&rs.keys_count, sizeof(rs.keys_count));
-        os << rs.descriptors;
-        os << rs.ef;
-        return os;
-    }
-
-    friend istream &operator>>(istream &is, SIMDRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> &rs) {
-        size_t leaf_size;
-        is.read((char *)&leaf_size, sizeof(leaf_size));
-        if (leaf_size != LEAF_SIZE) {
-            fprintf(stderr, "Serialized leaf size %d, code leaf size %d\n", int(leaf_size), int(LEAF_SIZE));
-            abort();
-        }
-        is.read((char *)&rs.bucket_size, sizeof(rs.bucket_size));
-        is.read((char *)&rs.keys_count, sizeof(rs.keys_count));
-        rs.nbuckets = max(1, (rs.keys_count + rs.bucket_size - 1) / rs.bucket_size);
-
-        is >> rs.descriptors;
-        is >> rs.ef;
-        return is;
     }
 };
 

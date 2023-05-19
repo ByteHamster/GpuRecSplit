@@ -283,22 +283,6 @@ uint32_t remix32(uint32_t z) {
     return z;
 }
 
-#ifdef __CUDACC__
-__forceinline__ __host__ __device__
-#endif
-uint32_t remap(uint64_t x, uint32_t n) {
-    constexpr bool USE_64_BITS = false;
-    if constexpr (USE_64_BITS) {
-        constexpr int masklen = 48;
-        constexpr uint64_t mask = (uint64_t(1) << masklen) - 1;
-        return ((remix(x) & mask) * n) >> masklen;
-    } else {
-        constexpr int masklen = 16;
-        constexpr uint32_t mask = (uint32_t(1) << masklen) - 1;
-        return ((remix32(uint32_t(x >> 32) ^ uint32_t(x)) & mask) * n) >> masklen;
-    }
-}
-
 /**
  *
  * A class for storing minimal perfect hash functions. The template
@@ -313,7 +297,7 @@ uint32_t remap(uint64_t x, uint32_t n) {
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = false>
+template <size_t LEAF_SIZE, util::AllocType AT, bool USE_BIJECTIONS_ROTATE, bool USE_64_BIT_REMAP>
 class AbstractParallelRecSplit {
   protected:
     using SplitStrat = SplittingStrategy<LEAF_SIZE>;
@@ -336,6 +320,21 @@ class AbstractParallelRecSplit {
 
     // Maps a 128-bit to a bucket using the first 64-bit half.
     inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
+
+#ifdef __CUDACC__
+    __forceinline__ __host__ __device__
+#endif
+    static uint32_t remixAndRemap(uint64_t x, uint32_t n) {
+        if constexpr (USE_64_BIT_REMAP) {
+            constexpr int masklen = 48;
+            constexpr uint64_t mask = (uint64_t(1) << masklen) - 1;
+            return ((remix(x) & mask) * n) >> masklen;
+        } else {
+            constexpr int masklen = 16;
+            constexpr uint32_t mask = (uint32_t(1) << masklen) - 1;
+            return ((remix32(uint32_t(x >> 32) ^ uint32_t(x)) & mask) * n) >> masklen;
+        }
+    }
 
     void parallelPartition(hash128_t *input, vector<uint64_t> &sorted,
                            vector<uint64_t> &bucket_size_acc, size_t num_threads) {
@@ -420,7 +419,7 @@ class AbstractParallelRecSplit {
 
         while (m > upper_aggr) { // fanout = 2
             const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap(hash.second + d + start_seed[level], m);
+            const size_t hmod = remixAndRemap(hash.second + d + start_seed[level], m);
 
             const uint32_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
             if (hmod < split) {
@@ -434,7 +433,7 @@ class AbstractParallelRecSplit {
         }
         if (m > lower_aggr) {
             const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap(hash.second + d + start_seed[NUM_START_SEEDS - 3], m);
+            const size_t hmod = remixAndRemap(hash.second + d + start_seed[NUM_START_SEEDS - 3], m);
 
             const int part = uint16_t(hmod) / lower_aggr;
             m = min(lower_aggr, m - part * lower_aggr);
@@ -444,7 +443,7 @@ class AbstractParallelRecSplit {
 
         if (m > _leaf) {
             const auto d = reader.readNext(golomb_param(m));
-            const size_t hmod = remap(hash.second + d + start_seed[NUM_START_SEEDS - 2], m);
+            const size_t hmod = remixAndRemap(hash.second + d + start_seed[NUM_START_SEEDS - 2], m);
 
             const int part = uint16_t(hmod) / _leaf;
             m = min(_leaf, m - part * _leaf);
@@ -457,11 +456,11 @@ class AbstractParallelRecSplit {
         uint64_t leaf_val;
         if (use_bijections_rotate && m == _leaf) {
             const uint64_t rotation = b % _leaf;
-            leaf_val = remap(x - rotation, _leaf);
+            leaf_val = remixAndRemap(x - rotation, _leaf);
             if (hash.second % 2 != 0) // is not left => need to rotate
                 leaf_val = (leaf_val + rotation) % _leaf;
         } else {
-            leaf_val = remap(x, m);
+            leaf_val = remixAndRemap(x, m);
         }
         return cum_keys + leaf_val;
     }
@@ -476,6 +475,32 @@ class AbstractParallelRecSplit {
     /** Returns an estimate of the size in bits of this structure. */
     size_t getBits() {
         return ef.bitCountCumKeys() + ef.bitCountPosition() + descriptors.getBits() + 8 * sizeof(*this);
+    }
+
+    friend ostream &operator<<(ostream &os, const AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, USE_64_BIT_REMAP> &rs) {
+        const size_t leaf_size = LEAF_SIZE;
+        os.write((char *)&leaf_size, sizeof(leaf_size));
+        os.write((char *)&rs.bucket_size, sizeof(rs.bucket_size));
+        os.write((char *)&rs.keys_count, sizeof(rs.keys_count));
+        os << rs.descriptors;
+        os << rs.ef;
+        return os;
+    }
+
+    friend istream &operator>>(istream &is, AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, USE_64_BIT_REMAP> &rs) {
+        size_t leaf_size;
+        is.read((char *)&leaf_size, sizeof(leaf_size));
+        if (leaf_size != LEAF_SIZE) {
+            fprintf(stderr, "Serialized leaf size %d, code leaf size %d\n", int(leaf_size), int(LEAF_SIZE));
+            abort();
+        }
+        is.read((char *)&rs.bucket_size, sizeof(rs.bucket_size));
+        is.read((char *)&rs.keys_count, sizeof(rs.keys_count));
+        rs.nbuckets = max(1, (rs.keys_count + rs.bucket_size - 1) / rs.bucket_size);
+
+        is >> rs.descriptors;
+        is >> rs.ef;
+        return is;
     }
 };
 

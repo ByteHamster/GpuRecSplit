@@ -79,6 +79,13 @@ void _checkCudaError(cudaError_t error, const char* cmd, const char* file, int l
     }
 }
 
+__forceinline__ __device__
+static uint32_t remixAndRemap32(uint64_t x, uint32_t n) {
+    constexpr int masklen = 16;
+    constexpr uint32_t mask = (uint32_t(1) << masklen) - 1;
+    return ((remix32(uint32_t(x >> 32) ^ uint32_t(x)) & mask) * n) >> masklen;
+}
+
 // Computes the point at which one should stop to test whether
 // bijection extraction failed on the GPU (around the square root of the leaf size).
 static constexpr array<uint8_t, MAX_LEAF_SIZE + 1> fill_gpu_bij_midstop() {
@@ -124,7 +131,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
 
     for (;;) {
         for (uint32_t i = 0; i < size; ++i) {
-            count += remap(x + s_bucket[i], size) < split;
+            count += remixAndRemap32(x + s_bucket[i], size) < split;
         }
         if (count == split) {
             atomicMin(reinterpret_cast<ulli*>(&s_result), static_cast<ulli>(x - seed));
@@ -142,7 +149,7 @@ __global__ void higherLevelKernel(uint64_t *__restrict__ device_keys, uint64_t *
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
-        const uint32_t child_pos = remap(seed + s_result + value, size) >= split;
+        const uint32_t child_pos = remixAndRemap32(seed + s_result + value, size) >= split;
         const uint32_t pos = atomicAdd(&writeback_pos[child_pos], 1);
         bucket[pos] = value;
     }
@@ -197,7 +204,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
 
         for (;;) {
             for (uint32_t i = 0; i < size; ++i) {
-                uint32_t shift = ((remap(x + s_bucket[i], size) / SPLIT) << 3);
+                uint32_t shift = ((remixAndRemap32(x + s_bucket[i], size) / SPLIT) << 3);
                 if constexpr (_MAX_FANOUT >= 5)
                     count += __funnelshift_lc(0U, 1U, shift); // is zero for shift >= 32
                 else
@@ -226,7 +233,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
 
         for (;;) {
             for (uint32_t i = 0; i < size; ++i) {
-                uint32_t shift = ((remap(x + s_bucket[i], size) / SPLIT) << 3);
+                uint32_t shift = ((remixAndRemap32(x + s_bucket[i], size) / SPLIT) << 3);
                 if constexpr (_MAX_FANOUT == 9)
                     count += shift < 64 ? 1ULL << shift : 0;
                 else
@@ -250,7 +257,7 @@ __global__ void aggrKernel(uint64_t *__restrict__ g_keys, uint64_t *__restrict__
 
     for (uint32_t i = threadIdx.x; i < size; i += blockDim.x) {
         const uint64_t value = s_bucket[i];
-        const uint32_t child_pos = remap(SEED + s_result + value, size) / SPLIT;
+        const uint32_t child_pos = remixAndRemap32(SEED + s_result + value, size) / SPLIT;
         const uint32_t pos = atomicAdd(&writeback_pos[child_pos], 1);
         bucket[pos] = value;
     }
@@ -316,11 +323,11 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
 
         for (;;) {
             for (int i = 0; i < size_left; ++i) {
-                mask_left |= 1U << remap(x + s_bucket_left[i], MAX_SIZE);
+                mask_left |= 1U << remixAndRemap32(x + s_bucket_left[i], MAX_SIZE);
             }
             if (__popc(mask_left) == size_left) {
                 for (int i = 0; i < size_right; ++i) {
-                    mask_right |= 1U << remap(x + s_bucket_right[i], MAX_SIZE);
+                    mask_right |= 1U << remixAndRemap32(x + s_bucket_right[i], MAX_SIZE);
                 }
                 if (__popc(mask_right) == size_right) {
                     // Try to rotate right part to see if both together form a bijection
@@ -344,7 +351,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
     } else if constexpr (MAX_SIZE < 14) { // no midstop, no sync_counter
         for (;;) {
             for (uint32_t i = 0; i < size; ++i) {
-                mask_left |= 1U << remap(x + s_bucket[i], size);
+                mask_left |= 1U << remixAndRemap32(x + s_bucket[i], size);
             }
             if (__builtin_expect(mask_left == found, 0)) {
                 atomicMin(reinterpret_cast<ulli*>(&s_result), static_cast<ulli>(x - SEED));
@@ -362,11 +369,11 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
         for (;;) {
             uint32_t i;
             for (i = 0; i < midstop; ++i) {
-                mask_left |= 1U << remap(x + s_bucket[i], size);
+                mask_left |= 1U << remixAndRemap32(x + s_bucket[i], size);
             }
             if (__builtin_expect(__popc(mask_left) == midstop, 0)) {
                 for (; i < size; ++i) {
-                    mask_left |= 1U << remap(x + s_bucket[i], size);
+                    mask_left |= 1U << remixAndRemap32(x + s_bucket[i], size);
                 }
                 if (mask_left == found) {
                     atomicMin(reinterpret_cast<ulli*>(&s_result), static_cast<ulli>(x - SEED));
@@ -401,8 +408,8 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
 
 template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
 class GPURecSplit
-    : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE> {
-    using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE>;
+    : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false> {
+    using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false>;
     using Superclass::SplitStrat;
     using Superclass::_leaf;
     using Superclass::lower_aggr;
