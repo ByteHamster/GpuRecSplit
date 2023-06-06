@@ -18,6 +18,9 @@ if(NOT TARGET Sux)
 	target_include_directories(Sux SYSTEM INTERFACE extlib/sux)
 endif()
 
+set(TLX_INSTALL_INCLUDE_DIR tlx CACHE PATH "Workaround for TLX breaking the first cmake call")
+add_subdirectory(extlib/tlx EXCLUDE_FROM_ALL)
+
 if(NOT TARGET ips2ra)
 	set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
 	add_subdirectory(extlib/ips2ra)
@@ -87,9 +90,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	target_include_directories(BenchmarkUtils INTERFACE benchmark)
 	target_include_directories(BenchmarkUtils INTERFACE test)
 	target_include_directories(BenchmarkUtils INTERFACE extlib/util/include)
-
-	set(TLX_INSTALL_INCLUDE_DIR tlx CACHE PATH "Workaround for TLX breaking the first cmake call")
-	add_subdirectory(extlib/tlx EXCLUDE_FROM_ALL)
 	target_link_libraries(BenchmarkUtils INTERFACE tlx)
 
 	# Warnings if this is the main project
