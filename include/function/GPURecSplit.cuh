@@ -36,10 +36,7 @@
 
 #pragma once
 
-#include "../util/Vector.hpp"
-#include "DoubleEF.hpp"
-#include "RiceBitVector.hpp"
-#include "AbstractParallelRecSplit.hpp"
+#include <sux/util/Vector.hpp>
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -51,9 +48,12 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
-
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
+
+#include "DoubleEF.hpp"
+#include "RiceBitVector.hpp"
+#include "AbstractParallelRecSplit.hpp"
 
 // Define constexpr namespace ce
 #include <gcem.hpp>
@@ -406,7 +406,7 @@ __global__ void leafKernel(const uint64_t *__restrict__ g_keys, const uint64_t *
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
+template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
 class GPURecSplit
     : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false> {
     using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, false>;

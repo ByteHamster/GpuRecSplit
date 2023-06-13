@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../support/SpookyV2.hpp"
+#include <sux/support/SpookyV2.hpp>
 
 namespace bez::function {
 

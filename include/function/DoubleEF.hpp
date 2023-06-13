@@ -28,8 +28,8 @@
 
 #pragma once
 
+#include <sux/util/Vector.hpp>
 #include "../support/common.hpp"
-#include "../util/Vector.hpp"
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -48,7 +48,6 @@
 namespace bez::function {
 
 using namespace bez;
-using namespace bez::util;
 
 /** A double Elias-Fano list.
  *
@@ -58,7 +57,7 @@ using namespace bez::util;
  *           using SIMD and other techniques.
  */
 
-template <util::AllocType AT = util::AllocType::MALLOC, bool FAST_CONSTRUCTION = false>
+template <sux::util::AllocType AT = sux::util::AllocType::MALLOC, bool FAST_CONSTRUCTION = false>
 class DoubleEF {
   private:
     static constexpr uint64_t log2q = LOG2Q;
@@ -68,7 +67,7 @@ class DoubleEF {
     static constexpr uint64_t super_q_mask = super_q - 1;
     static constexpr uint64_t q_per_super_q = super_q / q;
     static constexpr uint64_t super_q_size = 1 + q_per_super_q / 4;
-    Vector<uint64_t, AT> lower_bits, upper_bits_position, upper_bits_cum_keys, jump;
+    sux::util::Vector<uint64_t, AT> lower_bits, upper_bits_position, upper_bits_cum_keys, jump;
     uint64_t lower_bits_mask_cum_keys, lower_bits_mask_position;
 
     uint64_t num_buckets, u_cum_keys, u_position;
@@ -76,9 +75,9 @@ class DoubleEF {
     int64_t cum_keys_min_delta, min_diff;
     uint64_t bits_per_key_fixed_point;
 
-    __inline static void set(util::Vector<uint64_t, AT> &bits, const uint64_t pos) { bits[pos / 64] |= 1ULL << pos % 64; }
+    __inline static void set(sux::util::Vector<uint64_t, AT> &bits, const uint64_t pos) { bits[pos / 64] |= 1ULL << pos % 64; }
 
-    __inline static void set_bits(util::Vector<uint64_t, AT> &bits, const uint64_t start, const int width, const uint64_t value) {
+    __inline static void set_bits(sux::util::Vector<uint64_t, AT> &bits, const uint64_t start, const int width, const uint64_t value) {
         const uint64_t mask = ((UINT64_C(1) << width) - 1) << start % 8;
         uint64_t t;
         memcpy(&t, (uint8_t *)&bits + start / 8, 8);

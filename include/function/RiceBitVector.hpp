@@ -28,8 +28,8 @@
 
 #pragma once
 
+#include <sux/util/Vector.hpp>
 #include "../support/common.hpp"
-#include "../util/Vector.hpp"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -52,11 +52,11 @@ using namespace bez;
  * @tparam AT a type of memory allocation out of util::AllocType.
  */
 
-template <util::AllocType AT = util::AllocType::MALLOC> class RiceBitVector {
+template <sux::util::AllocType AT = sux::util::AllocType::MALLOC> class RiceBitVector {
 
   public:
 	class Builder {
-		util::Vector<uint64_t, AT> data;
+		sux::util::Vector<uint64_t, AT> data;
 		size_t bit_count = 0;
 
 	  public:
@@ -134,7 +134,7 @@ template <util::AllocType AT = util::AllocType::MALLOC> class RiceBitVector {
 	};
 
   private:
-	util::Vector<uint64_t, AT> data;
+	sux::util::Vector<uint64_t, AT> data;
 
 	friend std::ostream &operator<<(std::ostream &os, const RiceBitVector<AT> &rbv) {
 		os << rbv.data;
@@ -148,7 +148,7 @@ template <util::AllocType AT = util::AllocType::MALLOC> class RiceBitVector {
 
   public:
 	RiceBitVector() {}
-	RiceBitVector(util::Vector<uint64_t, AT> data) : data(std::move(data)) {}
+	RiceBitVector(sux::util::Vector<uint64_t, AT> data) : data(std::move(data)) {}
 
 	size_t getBits() const { return data.size() * sizeof(uint64_t) * 8; }
 
@@ -157,10 +157,10 @@ template <util::AllocType AT = util::AllocType::MALLOC> class RiceBitVector {
 		uint64_t curr_window_unary = 0;
 		uint64_t *curr_ptr_unary;
 		int valid_lower_bits_unary = 0;
-		util::Vector<uint64_t, AT> &data;
+		sux::util::Vector<uint64_t, AT> &data;
 
 	  public:
-		Reader(util::Vector<uint64_t, AT> &data) : data(data) {}
+		Reader(sux::util::Vector<uint64_t, AT> &data) : data(data) {}
 
 		uint64_t readNext(const int log2golomb) {
 			uint64_t result = 0;

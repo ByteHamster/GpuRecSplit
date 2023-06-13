@@ -44,7 +44,7 @@
 #include <util/Hash128.h>
 #include <thread>
 #include <condition_variable>
-#include "../util/Vector.hpp"
+#include <sux/util/Vector.hpp>
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
 #include "golombRiceMemo.hpp"
@@ -111,7 +111,7 @@ static constexpr array<uint8_t, MAX_LEAF_SIZE> fill_bij_midstop() {
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, util::AllocType AT = util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
+template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC, bool USE_BIJECTIONS_ROTATE = true>
 class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, true> {
     using Superclass = AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_ROTATE, true>;
     using Superclass::SplitStrat;

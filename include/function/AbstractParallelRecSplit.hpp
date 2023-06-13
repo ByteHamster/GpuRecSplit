@@ -36,7 +36,7 @@
 
 #pragma once
 
-#include "../util/Vector.hpp"
+#include <sux/util/Vector.hpp>
 #include "DoubleEF.hpp"
 #include "RiceBitVector.hpp"
 #include "golombRiceMemo.hpp"
@@ -297,7 +297,7 @@ uint32_t remix32(uint32_t z) {
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, util::AllocType AT, bool USE_BIJECTIONS_ROTATE, bool USE_64_BIT_REMAP>
+template <size_t LEAF_SIZE, sux::util::AllocType AT, bool USE_BIJECTIONS_ROTATE, bool USE_64_BIT_REMAP>
 class AbstractParallelRecSplit {
   protected:
     using SplitStrat = SplittingStrategy<LEAF_SIZE>;

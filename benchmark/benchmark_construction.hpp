@@ -13,25 +13,25 @@
 #include <function/SIMDRecSplit.hpp>
 #include <function/PartitionedSIMDRecSplit.h>
 template<size_t LEAF_SIZE>
-using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
-using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
+using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, false>;
 template<size_t LEAF_SIZE>
 using PartitionedSimdRecSplit = bez::function::PartitionedSIMDRecSplit<LEAF_SIZE>;
 std::string name = "SIMDRecSplit";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
 template<size_t LEAF_SIZE>
-using RecSplitRotate = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+using RecSplitRotate = bez::function::GPURecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
-using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
+using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, false>;
 std::string name = "GPURecSplit";
 #else
 #include <function/RecSplitRotate.hpp>
 template<size_t LEAF_SIZE>
-using RecSplitRotate = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, true>;
+using RecSplitRotate = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
-using RecSplit = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, bez::util::AllocType::MALLOC, false>;
+using RecSplit = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, false>;
 std::string name = "CpuRecSplit";
 #endif
 
@@ -60,6 +60,17 @@ void construct() {
     RecSplit rs(keys, bucketSize, numThreads);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
+
+    std::cout<<"Testing"<<std::endl;
+    std::vector<bool> taken(keys.size(), false);
+    for (auto key : keys) {
+        size_t hash = rs(key);
+        if (taken[hash]) {
+            std::cerr << "Collision!" << std::endl;
+            exit(1);
+        }
+        taken[hash] = true;
+    }
 
     std::cout<<"Querying"<<std::endl;
     uint64_t h = 0;
