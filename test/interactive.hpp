@@ -5,15 +5,15 @@
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, AT>;
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
-template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using RecSplit = bez::function::GPURecSplit<LEAF_SIZE, AT>;
 #else
 #include <function/RecSplitRotate.hpp>
-template<size_t LEAF_SIZE, bez::util::AllocType AT = bez::util::AllocType::MALLOC>
+template<size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC>
 using RecSplit = bez::function::recsplit_rotate::RecSplit<LEAF_SIZE, AT>;
 #endif
 

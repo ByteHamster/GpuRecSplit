@@ -1,5 +1,3 @@
-#pragma once
-
 #include <XorShift64.h>
 #include <algorithm>
 #include <cstdio>
