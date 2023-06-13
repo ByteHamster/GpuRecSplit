@@ -11,13 +11,10 @@
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
-#include <function/PartitionedSIMDRecSplit.h>
 template<size_t LEAF_SIZE>
 using RecSplitRotate = bez::function::SIMDRecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, true>;
 template<size_t LEAF_SIZE>
 using RecSplit = bez::function::SIMDRecSplit<LEAF_SIZE, sux::util::AllocType::MALLOC, false>;
-template<size_t LEAF_SIZE>
-using PartitionedSimdRecSplit = bez::function::PartitionedSIMDRecSplit<LEAF_SIZE>;
 std::string name = "SIMDRecSplit";
 #elif defined(GPU)
 #include <function/GPURecSplit.cuh>
@@ -115,31 +112,16 @@ int constructAll(int argc, const char* const* argv) {
     cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bytes('t', "numThreads", numThreads, "Threads to use for construction");
-    #ifdef SIMD
-        bool partitioned = false;
-        cmd.add_flag('p', "partitioned", partitioned, "Use partitioned multi-threaded variant");
-    #endif
 
     if (!cmd.process(argc, argv)) {
         return 1;
     }
 
-#ifdef SIMD
-    if (partitioned) {
-        if (leafMethod == "rotations") {
-            name = "PartitionedSIMDRecSplit";
-            dispatchLeafSize<PartitionedSimdRecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
-        }
-        return 0;
-    }
-#endif
-
     if (leafMethod == "bruteforce") {
         dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     } else if (leafMethod == "rotations") {
         dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
-    }
-    else {
+    } else {
         std::cerr<<"Invalid leaf mode argument: "<<leafMethod<<std::endl;
     }
     return 0;
