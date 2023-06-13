@@ -20,3 +20,13 @@ jobs:
         run: |
           cmake -B ./build
           cmake --build ./build --parallel
+      - name: Run tests
+        run: |
+          ./build/recsplit_construction     -n 50k --numThreads 1 -l 8 -b 2000 --numQueries 100 --leafMethod bruteforce
+          ./build/recsplit_construction     -n 50k --numThreads 4 -l 8 -b 2000 --numQueries 100 --leafMethod bruteforce
+          ./build/recsplit_construction     -n 50k --numThreads 1 -l 8 -b 2000 --numQueries 100 --leafMethod rotations 
+          ./build/recsplit_construction     -n 50k --numThreads 4 -l 8 -b 2000 --numQueries 100 --leafMethod rotations 
+          ./build/simdrecsplit_construction -n 50k --numThreads 1 -l 8 -b 2000 --numQueries 100 --leafMethod bruteforce
+          ./build/simdrecsplit_construction -n 50k --numThreads 4 -l 8 -b 2000 --numQueries 100 --leafMethod bruteforce
+          ./build/simdrecsplit_construction -n 50k --numThreads 1 -l 8 -b 2000 --numQueries 100 --leafMethod rotations 
+          ./build/simdrecsplit_construction -n 50k --numThreads 4 -l 8 -b 2000 --numQueries 100 --leafMethod rotations 
