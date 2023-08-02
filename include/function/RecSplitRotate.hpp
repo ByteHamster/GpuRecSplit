@@ -280,7 +280,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
                         x++;
                     }
                 } else {
-                    const size_t midstop = bij_midstop[m];
+                    const int midstop = bij_midstop[m];
                     for (;;) {
                         mask = 0;
                         size_t i;

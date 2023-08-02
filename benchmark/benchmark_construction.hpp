@@ -8,6 +8,7 @@
 #include <string>
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
+#include "BenchmarkData.h"
 
 #if defined(SIMD)
 #include <function/SIMDRecSplit.hpp>
@@ -45,12 +46,17 @@ template<typename RecSplit, typename hash128_t>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
-    std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
     util::XorShift64 prng(seed);
-	std::vector<hash128_t> keys;
-    for (size_t i = 0; i < numObjects; i++) {
-        keys.push_back(hash128_t(prng(), prng()));
-    }
+    //#define STRING_KEYS
+    #ifdef STRING_KEYS
+        std::vector<std::string> keys = generateInputData(numObjects);
+    #else
+        std::vector<hash128_t> keys;
+        std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
+        for (size_t i = 0; i < numObjects; i++) {
+            keys.push_back(hash128_t(prng(), prng()));
+        }
+    #endif
 
     std::cout<<"Constructing"<<std::endl;
     auto beginConstruction = std::chrono::high_resolution_clock::now();
