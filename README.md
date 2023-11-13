@@ -10,16 +10,19 @@ to the original [RecSplit implementation](https://github.com/vigna/sux/blob/mast
 
 | l | b | Method | Threads | B/Object | us/Object | Speedup |
 |---:|---:|:---|---:|---:|---:|---:|
-| 16 | 2000 | RecSplit [\[ALENEX'20\]](https://arxiv.org/abs/1910.06416) | 1 | 1.561 | 1152.6 |  |
-| 16 | 2000 | SimdRecSplit | 1 | 1.561 | 138.7 | 8 |
-| 16 | 2000 | SimdRecSplit | 16 | 1.562 | 28.2 | 40 |
-| 16 | 2000 | GpuRecSplit | 4 | 1.562 | 1.3 | 877 |
-| 18 | 50 | RecSplit [\[ALENEX'20\]](https://arxiv.org/abs/1910.06416) | 1 | 1.711 | 2919.5 |  |
-| 18 | 50 | SimdRecSplit | 1 | 1.706 | 58.2 | 50 |
-| 18 | 50 | SimdRecSplit | 16 | 1.707 | 12.3 | 238 |
-| 18 | 50 | GpuRecSplit | 4 | 1.708 | 0.8 | 3802 |
-| 24 | 2000 | GpuRecSplit | 4 | 1.498 | 525.5 |  |
-    
+| 16 | 2000 | RecSplit [\[ALENEX'20\]](https://arxiv.org/abs/1910.06416) | 1 | 1.560 | 1175.4 |  |
+| 16 | 2000 | SimdRecSplit | 1 | 1.560 | 138.0 | 8 |
+| 16 | 2000 | SimdRecSplit | 16 | 1.560 | 27.9 | 42 |
+| 16 | 2000 | GpuRecSplit | 4 | 1.5601 | 1.0 | 1173 |
+| 18 | 50 | RecSplit [\[ALENEX'20\]](https://arxiv.org/abs/1910.06416) | 1 | 1.707 | 2942.9 |  |
+| 18 | 50 | SimdRecSplit | 1 | 1.709 | 58.3 | 50 |
+| 18 | 50 | SimdRecSplit | 16 | 1.708 | 12.3 | 239 |
+| 18 | 50 | GpuRecSplit | 4 | 1.709 | 0.5 | 5438 |
+| 24 | 2000 | GpuRecSplit | 4 | 1.498 | 467.9 |  |
+
+In the space efficient configurations here, we use n = 5 million objects (strong scaling).
+For more detailed measurements, refer to [our paper](https://arxiv.org/abs/2212.09562).
+
 ### Library Usage
 
 Clone (with submodules, `git clone --recursive`) this repo and add it to your `CMakeLists.txt`:
@@ -83,19 +86,22 @@ More experiments comparing GpuRecSplit with competitors can be found in a differ
 GpuRecSplit is licensed exactly like `libstdc++` (GPLv3 + GCC Runtime Library Exception), which essentially means you can use it everywhere, exactly like `libstdc++`.
 You can find details in the [COPYING](/COPYING) and [COPYING.RUNTIME](/COPYING.RUNTIME) files.
 
-If you use the project in an academic context or publication, please cite our paper:
+If you use the project in an academic context or publication, please cite [our paper](https://arxiv.org/abs/2212.09562):
 
 ```
-@article{gpurecsplit2022,
-  author    = {Dominik Bez and
-        Florian Kurpicz and
-        Hans{-}Peter Lehmann and
-        Peter Sanders},
-  title     = {High Performance Construction of
-        RecSplit Based Minimal Perfect Hash Functions},
-  journal   = {CoRR},
-  volume    = {abs/2212.09562},
-  year      = {2022},
-  doi       = {10.48550/arXiv.2212.09562}
+@inproceedings{bez2022high,
+  author = {Dominik Bez and
+    Florian Kurpicz and
+    Hans{-}Peter Lehmann and
+    Peter Sanders},
+  title = {High Performance Construction of {RecSplit} Based Minimal Perfect Hash
+    Functions},
+  booktitle = {{ESA}},
+  series = {LIPIcs},
+  volume = {274},
+  pages = {19:1--19:16},
+  publisher = {Schloss Dagstuhl - Leibniz-Zentrum f{\"{u}}r Informatik},
+  year = {2023},
+  doi = {10.4230/LIPICS.ESA.2023.19}
 }
 ```
