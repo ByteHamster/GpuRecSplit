@@ -6,6 +6,8 @@ In addition, we harness parallelism on the level of bits, vectors, cores, and GP
 The code in this repository achieves significant speedups on SIMD machines and GPUs, compared
 to the original [RecSplit implementation](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp).
 
+### Construction performance
+
 <img src="https://raw.githubusercontent.com/ByteHamster/GpuRecSplit/main/plots.png" alt="Plots preview" />
 
 | l | b | Method | Threads | B/Object | us/Object | Speedup |
