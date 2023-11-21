@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software in an academic context or publication, please cite it as below."
+authors:
+- family-names: "Bez"
+  given-names: "Dominik"
+- family-names: "Kurpicz"
+  given-names: "Florian"
+  orcid: "https://orcid.org/0000-0002-2379-9455"
+- family-names: "Lehmann"
+  given-names: "Hans-Peter"
+  orcid: "https://orcid.org/0000-0002-0474-1805"
+- family-names: "Sanders"
+  given-names: "Peter"
+  orcid: "https://orcid.org/0000-0003-3330-9349"
+title: "High Performance Construction of RecSplit Based Minimal Perfect Hash Functions"
+preferred-citation:
+  type: conference-paper
+  title: "High Performance Construction of RecSplit Based Minimal Perfect Hash Functions"
+  authors:
+    - family-names: "Bez"
+      given-names: "Dominik"
+    - family-names: "Kurpicz"
+      given-names: "Florian"
+      orcid: "https://orcid.org/0000-0002-2379-9455"
+    - family-names: "Lehmann"
+      given-names: "Hans-Peter"
+      orcid: "https://orcid.org/0000-0002-0474-1805"
+    - family-names: "Sanders"
+      given-names: "Peter"
+      orcid: "https://orcid.org/0000-0003-3330-9349"
+  doi: "10.4230/LIPICS.ESA.2023.19"
+  journal: "ESA"
+  year: 2023
