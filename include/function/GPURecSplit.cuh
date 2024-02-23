@@ -772,8 +772,8 @@ class GPURecSplit
         auto unpack_time = duration_cast<nanoseconds>(unpack_end_time - cuda_end_time).count();
 #endif
 
-        cudaDeviceReset();
-        cudaFreeHost(host_results);
+        checkCudaError(cudaFreeHost(host_results));
+        checkCudaError(cudaDeviceReset());
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
         this->descriptors = builder.build();
         this->ef = DoubleEF<AT, true>(bucket_size_acc, bucket_pos_acc);
