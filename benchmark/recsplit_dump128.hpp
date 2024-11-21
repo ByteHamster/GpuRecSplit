@@ -1,6 +1,6 @@
 #pragma once
 
-#include <XorShift64.h>
+#include <bytehamster/util/XorShift64.h>
 #include "recsplitCorrectness.hpp"
 #include <algorithm>
 #include <chrono>
@@ -42,7 +42,7 @@ void benchmark(RS &rs, const uint64_t n) {
 	uint64_t h = 0;
 
 	for (int k = SAMPLES; k-- != 0;) {
-        util::XorShift64 prng(0x5603141978c51071);
+        bytehamster::util::XorShift64 prng(0x5603141978c51071);
 		auto begin = chrono::high_resolution_clock::now();
 		for (uint64_t i = 0; i < n; i++) h ^= rs(bez::function::hash128_t(prng(), prng() ^ h));
 		auto end = chrono::high_resolution_clock::now();
@@ -65,7 +65,7 @@ int build(int argc, char **argv) {
 
 	const uint64_t n = strtoll(argv[1], NULL, 0);
 	const size_t bucket_size = strtoll(argv[2], NULL, 0);
-    util::XorShift64 prng(0x5603141978c51071);
+    bytehamster::util::XorShift64 prng(0x5603141978c51071);
 	std::vector<bez::function::hash128_t> keys;
 	for (uint64_t i = 0; i < n; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 

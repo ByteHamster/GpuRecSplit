@@ -1,5 +1,5 @@
 #define MORESTATS
-#include <XorShift64.h>
+#include <bytehamster/util/XorShift64.h>
 #include <fstream>
 #include <cstdlib>
 
@@ -25,7 +25,7 @@ void interactive(int argc, char** argv) {
 	if (argc > 1) {
 		int n = atoi(argv[1]);
 		keys.reserve(n);
-        util::XorShift64 prng(0x5603141978c51071);
+        bytehamster::util::XorShift64 prng(0x5603141978c51071);
 		for (int i = 0; i < n; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 	} else {
 		for (std::string key; getline(std::cin, key) && key != "";) {

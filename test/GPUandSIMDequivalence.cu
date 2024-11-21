@@ -1,4 +1,4 @@
-#include <XorShift64.h>
+#include <bytehamster/util/XorShift64.h>
 #include <algorithm>
 #include <cstdio>
 #include <iostream>
@@ -35,7 +35,7 @@ bool test() {
 			else if (FROM_LEAF > 16)
 				size = min((unsigned long long)size, 1'000'000ULL);
 
-            util::XorShift64 prng(0x5603141978c51071);
+            bytehamster::util::XorShift64 prng(0x5603141978c51071);
 			for (uint64_t i = 0; i < size; i++) keys.push_back(bez::function::hash128_t(prng(), prng()));
 
 			int num_threads = std::thread::hardware_concurrency();

@@ -31,7 +31,7 @@ add_subdirectory(extlib/tlx EXCLUDE_FROM_ALL)
 
 if(NOT TARGET ips2ra)
 	set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
-	add_subdirectory(extlib/ips2ra)
+	add_subdirectory(extlib/ips2ra EXCLUDE_FROM_ALL)
 	find_package(TBB)
 	target_compile_options(ips2ra INTERFACE -D_REENTRANT)
 	target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
@@ -98,8 +98,10 @@ if(PROJECT_IS_TOP_LEVEL)
 	add_library(BenchmarkUtils INTERFACE)
 	target_include_directories(BenchmarkUtils INTERFACE benchmark)
 	target_include_directories(BenchmarkUtils INTERFACE test)
-	target_include_directories(BenchmarkUtils INTERFACE extlib/util/include)
 	target_link_libraries(BenchmarkUtils INTERFACE tlx)
+
+	add_subdirectory(extlib/util EXCLUDE_FROM_ALL)
+	target_link_libraries(BenchmarkUtils INTERFACE ByteHamster::Util)
 
 	# Warnings if this is the main project
 	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -frecord-gcc-switches>)

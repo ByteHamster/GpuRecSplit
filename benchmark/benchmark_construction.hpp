@@ -6,7 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <XorShift64.h>
+#include <bytehamster/util/XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
 #include "BenchmarkData.h"
 
@@ -46,7 +46,7 @@ template<typename RecSplit, typename hash128_t>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
-    util::XorShift64 prng(seed);
+    bytehamster::util::XorShift64 prng(seed);
     //#define STRING_KEYS
     #ifdef STRING_KEYS
         std::vector<std::string> keys = generateInputData(numObjects);
