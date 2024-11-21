@@ -365,11 +365,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
             } else if (m > lower_aggr) { // 2nd aggregation level
                 x = start_seed[NUM_START_SEEDS - 3];
                 const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
-#ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
-#else
-                size_t count[fanout]; // Note that we never read count[fanout-1]
-#endif // _MSC_VER
                 for (;;) {
                     memset(count, 0, sizeof count - sizeof *count);
                     for (size_t i = start; i < end; i++) {
@@ -410,11 +406,7 @@ class RecSplit : public AbstractParallelRecSplit<LEAF_SIZE, AT, USE_BIJECTIONS_R
             } else { // First aggregation level, m <= lower_aggr
                 x = start_seed[NUM_START_SEEDS - 2];
                 const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
-#ifdef _MSC_VER
                 size_t count[MAX_FANOUT];
-#else
-                size_t count[fanout]; // Note that we never read count[fanout-1]
-#endif // _MSC_VER
                 for (;;) {
                     memset(count, 0, sizeof count - sizeof *count);
                     for (size_t i = start; i < end; i++) {

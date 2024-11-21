@@ -1,6 +1,14 @@
-cmake_minimum_required (VERSION 3.16)
+cmake_minimum_required (VERSION 3.25)
 cmake_policy(SET CMP0048 NEW)
 project(GPURecSplit LANGUAGES CXX)
+
+if(TARGET RecSplit)
+	return()
+endif()
+
+if (NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE "Release")
+endif ()
 
 # ---------------------------- Dependencies ----------------------------
 if(NOT TARGET vectorclass)
@@ -42,11 +50,7 @@ endif()
 # Standard RecSplit
 add_library(RecSplit INTERFACE)
 target_compile_features(RecSplit INTERFACE cxx_std_20)
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-	target_include_directories(RecSplit INTERFACE include)
-else()
-	target_include_directories(RecSplit SYSTEM INTERFACE include)
-endif()
+target_include_directories(RecSplit INTERFACE include)
 target_link_libraries(RecSplit INTERFACE gcem pthread Ips2raRecSplitSorter Sux)
 target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
@@ -88,7 +92,9 @@ else()
 endif(SSE4_2_FOUND)
 
 # ---------------------------- Benchmarks ----------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(PROJECT_IS_TOP_LEVEL)
+	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
+
 	add_library(BenchmarkUtils INTERFACE)
 	target_include_directories(BenchmarkUtils INTERFACE benchmark)
 	target_include_directories(BenchmarkUtils INTERFACE test)
@@ -98,10 +104,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	# Warnings if this is the main project
 	target_compile_options(RecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -frecord-gcc-switches>)
 	if(SSE4_2_FOUND)
-		target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -frecord-gcc-switches>)
+		target_compile_options(SIMDRecSplit INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
 	endif()
 	if (CMAKE_CUDA_COMPILER)
-		target_compile_options(GPURecSplit INTERFACE -Xcompiler="-Wall"  -Xcompiler="-Wextra" -Xcompiler="-frecord-gcc-switches")
+		target_compile_options(GPURecSplit INTERFACE -Xcompiler="-Wall" -Xcompiler="-Wextra" -Xcompiler="-Werror" -Xcompiler="-frecord-gcc-switches")
 	endif()
 
 	# Standard RecSplit

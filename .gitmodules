@@ -13,9 +13,6 @@
 [submodule "extlib/sux"]
 	path = extlib/sux
 	url = https://github.com/ByteHamster-etc/sux.git
-[submodule "extlib/cmake-findsse"]
-	path = extlib/cmake-findsse
-	url = https://github.com/hideo55/CMake-FindSSE.git
 [submodule "extlib/ips2ra"]
 	path = extlib/ips2ra
 	url = https://github.com/ips4o/ips2ra.git
