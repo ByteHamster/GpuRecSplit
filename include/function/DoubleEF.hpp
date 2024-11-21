@@ -185,10 +185,10 @@ class DoubleEF {
         assert(l_cum_keys * 2 + l_position <= 56); // To be able to perform a single unaligned read
 
 #ifdef MORESTATS
-        printf("Elias-Fano l (cumulative): %d\n", l_cum_keys);
-        printf("Elias-Fano l (positions): %d\n", l_position);
-        printf("Elias-Fano u (cumulative): %lld\n", u_cum_keys);
-        printf("Elias-Fano u (positions): %lld\n", u_position);
+        printf("Elias-Fano l (cumulative): %lu\n", l_cum_keys);
+        printf("Elias-Fano l (positions): %lu\n", l_position);
+        printf("Elias-Fano u (cumulative): %lu\n", u_cum_keys);
+        printf("Elias-Fano u (positions): %lu\n", u_position);
 #endif
 
         lower_bits_mask_cum_keys = (UINT64_C(1) << l_cum_keys) - 1;

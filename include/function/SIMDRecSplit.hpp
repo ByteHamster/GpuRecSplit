@@ -668,7 +668,7 @@ class SIMDRecSplit
             size_t aux = m;
             SplittingStrategy<LEAF_SIZE> strat(m);
             auto v = strat.begin();
-            for (int i = 0; i < strat.fanout(); ++i, ++v) {
+            for (size_t i = 0; i < strat.fanout(); ++i, ++v) {
                 e_trials *= pow((double)m / *v, *v);
                 for (size_t j = *v; j > 0; --j, --aux) {
                     e_trials *= (double)j / aux;
@@ -846,7 +846,7 @@ class SIMDRecSplit
             if (num_bij_trials[i] != 0) {
                 tot_bij_count += bij_count[i];
                 tot_bij_evals += num_bij_evals[i];
-                printf("%-3d%20d%20.2f%20.2f%20.2f%20.2f%20lld\n", i, bij_count[i], (double)num_bij_trials[i] / bij_count[i], pow(i, i) / fact, (double)num_bij_evals[i] / bij_count[i],
+                printf("%-3d%20lu%20.2f%20.2f%20.2f%20.2f%20lu\n", i, bij_count[i], (double)num_bij_trials[i] / bij_count[i], pow(i, i) / fact, (double)num_bij_evals[i] / bij_count[i],
                        (_leaf <= 8 ? i : bij_midstop[i]) * pow(i, i) / fact, num_bij_evals[i]);
             }
             fact *= (i + 1);
@@ -855,9 +855,9 @@ class SIMDRecSplit
         printf("\n");
         printf("Split count:       %16zu\n", split_count);
 
-        printf("Total split evals: %16lld\n", num_split_evals);
-        printf("Total bij evals:   %16lld\n", tot_bij_evals);
-        printf("Total evals:       %16lld\n", num_split_evals + tot_bij_evals);
+        printf("Total split evals: %16lud\n", num_split_evals);
+        printf("Total bij evals:   %16lu\n", tot_bij_evals);
+        printf("Total evals:       %16lu\n", num_split_evals + tot_bij_evals);
 
         printf("\n");
         printf("Average depth:        %f\n", (double)sum_depths / this->keys_count);

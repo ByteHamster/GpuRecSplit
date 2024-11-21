@@ -71,20 +71,20 @@ static constexpr int MAX_FANOUT = 9;
 #define MAX_LEVEL_TIME (20)
 
 static constexpr double log2e = 1.44269504089;
-static uint64_t num_bij_trials[MAX_LEAF_SIZE], num_split_trials;
-static uint64_t num_bij_evals[MAX_LEAF_SIZE], num_split_evals;
-static uint64_t bij_count[MAX_LEAF_SIZE], split_count;
-static uint64_t expected_split_trials, expected_split_evals;
-static uint64_t bij_unary, bij_fixed, bij_unary_golomb, bij_fixed_golomb;
-static uint64_t split_unary, split_fixed, split_unary_golomb, split_fixed_golomb;
-static uint64_t max_split_code, min_split_code, sum_split_codes;
-static uint64_t max_bij_code, min_bij_code, sum_bij_codes;
-static uint64_t sum_depths;
-static uint64_t time_bij;
-static uint64_t time_split[MAX_LEVEL_TIME];
-size_t minsize = 0, maxsize = 0;
-double ub_split_bits = 0, ub_bij_bits = 0;
-double ub_split_evals = 0;
+[[maybe_unused]] static uint64_t num_bij_trials[MAX_LEAF_SIZE], num_split_trials;
+[[maybe_unused]] static uint64_t num_bij_evals[MAX_LEAF_SIZE], num_split_evals;
+[[maybe_unused]] static uint64_t bij_count[MAX_LEAF_SIZE], split_count;
+[[maybe_unused]] static uint64_t expected_split_trials, expected_split_evals;
+[[maybe_unused]] static uint64_t bij_unary, bij_fixed, bij_unary_golomb, bij_fixed_golomb;
+[[maybe_unused]] static uint64_t split_unary, split_fixed, split_unary_golomb, split_fixed_golomb;
+[[maybe_unused]] static uint64_t max_split_code, min_split_code, sum_split_codes;
+[[maybe_unused]] static uint64_t max_bij_code, min_bij_code, sum_bij_codes;
+[[maybe_unused]] static uint64_t sum_depths;
+[[maybe_unused]] static uint64_t time_bij;
+[[maybe_unused]] static uint64_t time_split[MAX_LEVEL_TIME];
+[[maybe_unused]] size_t minsize = 0, maxsize = 0;
+[[maybe_unused]] double ub_split_bits = 0, ub_bij_bits = 0;
+[[maybe_unused]] double ub_split_evals = 0;
 #endif
 
 #ifndef M_PI
@@ -171,7 +171,7 @@ template <size_t LEAF_SIZE> class SplittingStrategy {
         bool operator!=(const split_iterator &other) const { return !(*this == other); }
     };
 
-    explicit SplittingStrategy(size_t m) : m(m), last_unit(m), curr_index(0), curr_unit(0) {
+    explicit SplittingStrategy(size_t m) : m(m), curr_unit(0), curr_index(0), last_unit(m) {
         split_params(m, _fanout, unit);
         this->curr_unit = part_size();
         this->last_unit -= this->curr_unit;
