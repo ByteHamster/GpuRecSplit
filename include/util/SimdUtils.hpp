@@ -9,9 +9,6 @@ constexpr bool NO_AVX = false;
 
 #ifdef __AVX512VPOPCNTDQ__
 #define SIMDRS_512_BIT_POPCNT
-#pragma message("AVX512 with popcount")
-#else
-#pragma message("AVX512")
 #endif
 
 #elif INSTRSET == 8
