@@ -130,7 +130,7 @@ if(PROJECT_IS_TOP_LEVEL)
 		function(prepareCudaTarget target)
 			# Need to be set on the top-level target, not the GPURecSplit target. Otherwise cmake complains
 			set_target_properties(${target} PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
-			set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "50;61;72")
+			set_target_properties(${target} PROPERTIES CUDA_ARCHITECTURES "native")
 		endfunction()
 
 		add_executable(gpurecsplit_dump128 benchmark/recsplit_dump128.cu)
